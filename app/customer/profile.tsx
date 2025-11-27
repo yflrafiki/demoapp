@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { useRouter, useFocusEffect } from "expo-router";
 
-export default function MechanicProfile() {
+export default function CustomerProfile() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function MechanicProfile() {
     }
 
     const { data } = await supabase
-      .from("mechanics")
+      .from("customers")
       .select("*")
       .eq("auth_id", user.id)
       .single();
@@ -33,7 +33,7 @@ export default function MechanicProfile() {
     setLoading(false);
   };
 
-  // 🔥 Refresh WHENEVER screen is focused (fix)
+  // Refresh when returning from Edit Profile
   useFocusEffect(
     useCallback(() => {
       load();
@@ -54,9 +54,8 @@ export default function MechanicProfile() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Mechanic Profile</Text>
+      <Text style={styles.header}>Customer Profile</Text>
 
-      {/* Main Profile Card */}
       <View style={styles.card}>
         <Text style={styles.label}>Name</Text>
         <Text style={styles.value}>{profile?.name}</Text>
@@ -67,19 +66,17 @@ export default function MechanicProfile() {
         <Text style={styles.label}>Email</Text>
         <Text style={styles.value}>{profile?.email}</Text>
 
-        <Text style={styles.label}>Service Type</Text>
-        <Text style={styles.value}>{profile?.service}</Text>
+        <Text style={styles.label}>Car Type</Text>
+        <Text style={styles.value}>{profile?.car_type}</Text>
       </View>
 
-      {/* Edit Button */}
       <TouchableOpacity
         style={styles.editBtn}
-        onPress={() => router.push("/mechanic/edit-profile")}
+        onPress={() => router.push("/customer/edit-profile")}
       >
         <Text style={styles.editText}>Edit Profile</Text>
       </TouchableOpacity>
 
-      {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
@@ -90,55 +87,29 @@ export default function MechanicProfile() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: "#F9F9F9" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-
-  header: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 20
-  },
-
+  header: { fontSize: 28, fontWeight: "700", marginBottom: 20 },
   card: {
     backgroundColor: "#fff",
     padding: 20,
     borderRadius: 12,
     marginBottom: 30,
-    elevation: 2
+    elevation: 2,
   },
-
-  label: {
-    fontSize: 14,
-    color: "#888",
-    marginTop: 10
-  },
-
-  value: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 4
-  },
-
+  label: { fontSize: 14, color: "#888", marginTop: 10 },
+  value: { fontSize: 18, fontWeight: "600", marginTop: 4 },
   editBtn: {
     backgroundColor: "#1E90FF",
     padding: 14,
     borderRadius: 10,
     alignItems: "center",
-    marginBottom: 16
+    marginBottom: 16,
   },
-  editText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16
-  },
-
+  editText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   logoutBtn: {
     backgroundColor: "red",
     padding: 14,
     borderRadius: 10,
-    alignItems: "center"
+    alignItems: "center",
   },
-  logoutText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16
-  }
+  logoutText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 });

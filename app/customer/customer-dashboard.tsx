@@ -1,11 +1,20 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  RefreshControl
+} from "react-native";
 import { supabase } from "../../lib/supabase";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 export default function CustomerDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -25,97 +34,104 @@ export default function CustomerDashboard() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  // Auto refresh when screen becomes active
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [])
+  );
+
+  // Pull to refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   if (loading)
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator />
       </View>
     );
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <Text style={styles.welcome}>Welcome back,</Text>
-      <Text style={styles.name}>{profile?.name}</Text>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      <Text style={styles.title}>Welcome, {profile?.name}</Text>
 
-      {/* Quick Info */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Car Type</Text>
-        <Text style={styles.cardValue}>{profile?.car_type}</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Phone</Text>
-        <Text style={styles.cardValue}>{profile?.phone}</Text>
-      </View>
-
-      {/* Navigate to Profile */}
       <TouchableOpacity
-        style={styles.actionCard}
+        style={styles.profileBtn}
         onPress={() => router.push("/customer/profile")}
       >
-        <Text style={styles.actionTitle}>Profile & Settings</Text>
-        <Text style={styles.actionSubtitle}>View or edit your information</Text>
+        <Text style={styles.profileText}>View / Edit Profile</Text>
       </TouchableOpacity>
 
-      {/* More dashboard features can be added here */}
-    </View>
+      <View style={styles.card}>
+        <Text style={styles.label}>Email</Text>
+        <Text style={styles.value}>{profile?.email}</Text>
+
+        <Text style={styles.label}>Phone</Text>
+        <Text style={styles.value}>{profile?.phone}</Text>
+
+        <Text style={styles.label}>Car Type</Text>
+        <Text style={styles.value}>{profile?.car_type}</Text>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#F9F9F9",
+  container: { 
+    flex: 1, 
+    padding: 20, 
+    marginTop: 40
   },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  center: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
   },
-  welcome: {
-    fontSize: 20,
-    color: "#555",
-  },
-  name: {
-    fontSize: 28,
+
+  title: {
+    fontSize: 24,
     fontWeight: "700",
-    marginBottom: 20,
+    marginBottom: 20
   },
-  card: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  cardLabel: {
-    fontSize: 14,
-    color: "#888",
-  },
-  cardValue: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  actionCard: {
+
+  profileBtn: {
     backgroundColor: "#1E90FF",
-    padding: 20,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginBottom: 20
+  },
+  profileText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700"
+  },
+
+  card: {
+    backgroundColor: "#F4F4F4",
+    padding: 18,
     borderRadius: 12,
-    marginTop: 20,
+    marginBottom: 20
   },
-  actionTitle: {
-    fontSize: 20,
-    color: "#fff",
-    fontWeight: "700",
-  },
-  actionSubtitle: {
+
+  label: {
     fontSize: 14,
-    color: "#e7e7e7",
-    marginTop: 4,
+    fontWeight: "600",
+    color: "#777",
+    marginTop: 10
   },
+  value: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 4
+  }
 });
