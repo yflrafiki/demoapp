@@ -16,6 +16,10 @@ const RootLayout = () => {
       <Stack.Screen name="customer/customer-dashboard.tsx" />
       <Stack.Screen name="customer/profile" />
       <Stack.Screen name="customer/edit-profile" />
+      <Stack.Screen name="customer/choose-mechanic.tsx" />
+      <Stack.Screen name="customer/map-mechanics.tsx" />
+      <Stack.Screen name="customer/send-request.tsx" />
+      <Stack.Screen name="mechanic/requests-inbox.tsx" />
       <Stack.Screen name="home/index" />
       <Stack.Screen name="mechanic/edit-profile.tsx" />
     </Stack>
