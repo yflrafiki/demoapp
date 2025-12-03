@@ -13,6 +13,7 @@ import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect, router } from "expo-router";
 import { Mechanic } from "../../types/mechanic.types";
+import LeafletMap from "../components/LeafletMap";
 
 export default function ChooseMechanic() {
   const [customer, setCustomer] = useState<any>(null);
@@ -23,6 +24,32 @@ export default function ChooseMechanic() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Subscribe to mechanics table changes so we see updated locations in real-time
+  useEffect(() => {
+    let channel: any;
+    (async () => {
+      try {
+        channel = supabase
+          .channel("public:mechanics")
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "mechanics" },
+            (payload) => {
+              // For simplicity, reload full mechanics list when anything changes
+              loadData();
+            }
+          )
+          .subscribe();
+      } catch (e) {
+        console.log("Mechanics realtime subscribe failed", e);
+      }
+    })();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   useFocusEffect(
@@ -43,6 +70,8 @@ export default function ChooseMechanic() {
         return;
       }
 
+      console.log("choose-mechanic: auth user:", { id: user.id, email: user.email });
+
       // Get customer profile
       const { data: customerData } = await supabase
         .from("customers")
@@ -62,18 +91,41 @@ export default function ChooseMechanic() {
         });
       }
 
-      // Get all available mechanics
-      const { data: mechanicsData } = await supabase
+      // Get all mechanics
+      const resp = await supabase
         .from("mechanics")
-        .select("*")
-        .eq("is_available", true)
+        .select("id,name,lat,lng,is_available,specialization,rating,created_at")
         .order("created_at", { ascending: false });
 
-      setMechanics(mechanicsData || []);
+      // Diagnostic logging: show full response so we can see errors/policies
+      console.log("choose-mechanic: supabase mechanics resp:", resp);
+
+      const mechanicsData = resp.data;
+      const mechanicsError = resp.error;
+      if (mechanicsError) {
+        console.warn("choose-mechanic: mechanics query error:", mechanicsError);
+      }
+
+      setMechanics((mechanicsData as any) || []);
     } catch (err: any) {
       Alert.alert("Error", err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const requestLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Location required", "Please enable location in app settings to see nearby mechanics.");
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({});
+      setCustomerLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+    } catch (e: any) {
+      Alert.alert("Location error", e.message || String(e));
     }
   };
 
@@ -105,6 +157,26 @@ export default function ChooseMechanic() {
       pathname: "/customer/send-request",
       params: { mechanicId: selectedMechanic.id },
     });
+  };
+
+  const markers = mechanics
+    .filter((m) => m.lat !== null && m.lat !== undefined && m.lng !== null && m.lng !== undefined)
+    .map((m) => ({
+      id: m.id,
+      lat: typeof m.lat === "string" ? parseFloat(m.lat) : (m.lat as number),
+      lng: typeof m.lng === "string" ? parseFloat(m.lng) : (m.lng as number),
+      title: m.name,
+      subtitle: m.specialization,
+    }));
+
+  // Debug: log markers and expose a quick refresh
+  useEffect(() => {
+    console.log("choose-mechanic: mechanics count=", mechanics.length, "markers=", markers);
+  }, [mechanics, markers]);
+
+  const handleMarkerPress = (id: string | number) => {
+    const mech = mechanics.find((m) => String(m.id) === String(id));
+    if (mech) setSelectedMechanic(mech);
   };
 
   if (loading) {
@@ -187,6 +259,36 @@ export default function ChooseMechanic() {
         </TouchableOpacity>
         <Text style={styles.title}>Select a Mechanic</Text>
         <View style={{ width: 40 }} />
+      </View>
+
+      { !customerLocation && (
+        <View style={styles.locationBanner}>
+          <Text style={styles.locationBannerText}>Location is disabled. Enable to see distances.</Text>
+          <TouchableOpacity onPress={requestLocation} style={styles.locationButton}>
+            <Text style={styles.locationButtonText}>Allow Location</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Map view showing nearby mechanics */}
+      <View style={styles.mapContainer}>
+        <LeafletMap customer={customerLocation} markers={markers} onMarkerPress={handleMarkerPress} />
+
+        {/* Debug badge: shows how many markers we detected and allows quick refresh */}
+        <View style={styles.mapDebugContainer} pointerEvents="box-none">
+          <View style={styles.mapDebugBadge}>
+            <Text style={styles.mapDebugText}>{markers.length} markers</Text>
+          </View>
+          <TouchableOpacity style={styles.mapDebugButton} onPress={loadData}>
+            <Text style={styles.mapDebugButtonText}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
+
+        {markers.length === 0 && (
+          <View style={styles.mapOverlay}>
+            <Text style={styles.mapOverlayText}>No mechanic locations available</Text>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -423,6 +525,83 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     color: "#fff",
     fontSize: 16,
+    fontWeight: "700",
+  },
+  locationBanner: {
+    backgroundColor: "#fff3e0",
+    padding: 12,
+    margin: 12,
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  locationBannerText: {
+    color: "#8a6d3b",
+    flex: 1,
+    marginRight: 12,
+  },
+  locationButton: {
+    backgroundColor: "#1E90FF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  locationButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  mapContainer: {
+    height: 260,
+    width: "100%",
+    backgroundColor: "#fff",
+  },
+  mapOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    pointerEvents: "none",
+  },
+  mapOverlayText: {
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    color: "#666",
+  },
+  mapDebugContainer: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    zIndex: 20,
+  },
+  mapDebugBadge: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  mapDebugText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  mapDebugButton: {
+    backgroundColor: "#1E90FF",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  mapDebugButtonText: {
+    color: "#fff",
+    fontSize: 12,
     fontWeight: "700",
   },
 });

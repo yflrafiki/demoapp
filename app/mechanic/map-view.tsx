@@ -109,6 +109,21 @@ export default function MechanicMap() {
             lng: location.coords.longitude,
           })
           .eq("id", mechanic.id);
+        // Also update any currently accepted requests with mechanic coords
+        try {
+          const { data: acceptedRequests } = await supabase
+            .from("requests")
+            .select("id")
+            .eq("mechanic_id", mechanic.id)
+            .eq("status", "accepted");
+          if (acceptedRequests && acceptedRequests.length > 0) {
+            for (const r of acceptedRequests) {
+              await updateRequestLocation(r.id, location.coords.latitude, location.coords.longitude, true);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
       }
 
       // Set up location updates every 5 seconds
@@ -128,6 +143,21 @@ export default function MechanicMap() {
                 lng: loc.coords.longitude,
               })
               .eq("id", mechanic.id);
+            // update accepted requests with latest mechanic location
+            try {
+              const { data: acceptedRequests } = await supabase
+                .from("requests")
+                .select("id")
+                .eq("mechanic_id", mechanic.id)
+                .eq("status", "accepted");
+              if (acceptedRequests && acceptedRequests.length > 0) {
+                for (const r of acceptedRequests) {
+                  await updateRequestLocation(r.id, loc.coords.latitude, loc.coords.longitude, true);
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
           }
         } catch (err) {
           console.log("Error updating location:", err);
@@ -149,7 +179,8 @@ export default function MechanicMap() {
       if (!mechanic?.id) throw new Error("Mechanic not found");
 
       await acceptRequest(request.id, mechanic.id);
-      Alert.alert("Success", "Request accepted! You can now navigate to the customer.");
+      // Navigate to in-app navigation screen so mechanic can follow customer
+      router.push({ pathname: "/mechanic/navigation", params: { requestId: request.id } });
       loadRequests();
       setSelectedRequest(null);
     } catch (err: any) {

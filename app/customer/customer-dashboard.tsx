@@ -16,6 +16,7 @@ import { getCustomerRequests } from "../../lib/requests";
 
 export default function CustomerDashboard() {
   const [user, setUser] = useState<any>(null);
+  const [customerName, setCustomerName] = useState<string | null>(null);
   const [requests, setRequests] = useState<MechanicRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,9 +29,79 @@ export default function CustomerDashboard() {
     useCallback(() => {
       if (user?.id) {
         loadRequests();
+        // Refresh profile when screen is focused so changes from edit-profile reflect immediately
+        fetchCustomerProfile();
       }
     }, [user?.id])
   );
+
+  // Subscribe to requests changes so we get real-time notifications when mechanic arrives
+  useEffect(() => {
+    if (!user?.id) return;
+    let channel: any;
+    (async () => {
+      try {
+        // Get customer id first
+        const { data: customerData } = await supabase.from("customers").select("id").eq("auth_id", user.id).single();
+        if (!customerData) return;
+
+        channel = supabase
+          .channel(`public:requests:customer:${customerData.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "requests",
+              filter: `customer_id=eq.${customerData.id}`
+            },
+            (payload) => {
+              // If request status changed to completed, show notification
+              if (payload.new?.status === "completed" && payload.old?.status === "accepted") {
+                Alert.alert("Mechanic Arrived ✓", "The mechanic has arrived and completed the service.");
+              }
+              // Update requests state directly without full reload
+              setRequests(prev => prev.map(r => r.id === (payload.new as MechanicRequest)?.id ? (payload.new as MechanicRequest) : r));
+            }
+          )
+          .subscribe();
+      } catch (e) {
+        console.log("requests realtime subscribe failed", e);
+      }
+    })();
+
+    // also subscribe to customer profile changes so the dashboard updates when profile is edited
+    let profileChannel: any;
+    (async () => {
+      try {
+        const { data: customerData } = await supabase.from("customers").select("id").eq("auth_id", user.id).single();
+        if (!customerData) return;
+
+        profileChannel = supabase
+          .channel(`public:customers:customer:${customerData.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "customers",
+              filter: `id=eq.${customerData.id}`
+            },
+            (payload: any) => {
+              if (payload.new?.name) setCustomerName(payload.new.name);
+            }
+          )
+          .subscribe();
+      } catch (e) {
+        console.log("customer profile realtime subscribe failed", e);
+      }
+    })();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      if (profileChannel) supabase.removeChannel(profileChannel);
+    };
+  }, [user?.id]);
 
   const getCurrentUser = async () => {
     try {
@@ -39,22 +110,45 @@ export default function CustomerDashboard() {
       } = await supabase.auth.getUser();
       if (user) {
         setUser(user);
+        try {
+          const { data: customerRow } = await supabase
+            .from("customers")
+            .select("id, name")
+            .eq("auth_id", user.id)
+            .maybeSingle();
+          if (customerRow) setCustomerName(customerRow.name || null);
+        } catch (e) {
+          // ignore profile fetch errors
+        }
       }
     } catch (err: any) {
       Alert.alert("Error", "Failed to get user");
     }
   };
 
+  const fetchCustomerProfile = async () => {
+    if (!user?.id) return;
+    try {
+      const { data: customerRow } = await supabase
+        .from("customers")
+        .select("id, name, phone")
+        .eq("auth_id", user.id)
+        .maybeSingle();
+      if (customerRow) setCustomerName(customerRow.name || null);
+    } catch (e) {
+      console.log('Failed to fetch customer profile', e);
+    }
+  };
+
   const loadRequests = async () => {
     if (!user?.id) return;
     try {
-      setLoading(true);
       const data = await getCustomerRequests(user.id);
       setRequests(data || []);
     } catch (err: any) {
-      Alert.alert("Error", "Failed to load requests: " + err.message);
+      if (!refreshing) Alert.alert("Error", "Failed to load requests: " + err.message);
     } finally {
-      setLoading(false);
+      if (!refreshing) setLoading(false);
     }
   };
 
@@ -136,9 +230,24 @@ export default function CustomerDashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>My Requests</Text>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
+        <View>
+          <Text style={styles.greeting}>Hello{customerName ? `, ${customerName}` : ''} 👋</Text>
+          <Text style={styles.title}>My Requests</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity style={styles.profileBtn} onPress={() => router.push('/customer/edit-profile')}>
+            <Text style={styles.profileBtnText}>Edit Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.topActions}>
+        <TouchableOpacity style={styles.requestBtn} onPress={() => router.push('/customer/choose-mechanic')}>
+          <Text style={styles.requestBtnText}>Request Mechanic</Text>
         </TouchableOpacity>
       </View>
 
@@ -158,12 +267,12 @@ export default function CustomerDashboard() {
         contentContainerStyle={styles.listContent}
       />
 
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/customer/choose-mechanic")}
       >
         <Text style={styles.fabText}>+ Request Mechanic</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   );
 }
@@ -285,5 +394,39 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  greeting: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 4,
+  },
+  profileBtn: {
+    backgroundColor: '#EEE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  profileBtnText: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  topActions: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  requestBtn: {
+    backgroundColor: '#1E90FF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  requestBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });

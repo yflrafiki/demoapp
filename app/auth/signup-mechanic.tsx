@@ -31,7 +31,10 @@ export default function MechanicSignup() {
         auth_id: authId,
         name,
         phone,
-        service
+        specialization: service,
+        is_available: true,
+        lat: null,
+        lng: null
       });
 
       router.replace("/mechanic/dashboard");

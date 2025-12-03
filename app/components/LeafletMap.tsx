@@ -4,25 +4,30 @@ import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 
 type Marker = { id: string | number; lat: number; lng: number; title?: string; subtitle?: string };
+type Polyline = { id: string | number; coords: Array<[number, number]>; color?: string };
 
 export default function LeafletMap({
   customer,
   markers,
+  polylines,
   onMarkerPress,
 }: {
   customer: { lat: number; lng: number } | null;
   markers: Marker[];
+  polylines?: Polyline[];
   onMarkerPress?: (id: string | number) => void;
 }) {
-  const webviewRef = useRef<WebView | null>(null);
+  // Use a broad ref type because react-native-webview's ref typing
+  // can be overly strict in some TypeScript setups.
+  const webviewRef = useRef<any>(null);
 
-  // send markers & center to webview whenever markers/customer change
+  // send markers, polylines & center to webview whenever markers/customer/polylines change
   useEffect(() => {
     if (!webviewRef.current) return;
-    const payload = JSON.stringify({ type: "set-data", data: { center: customer, markers } });
-    // postMessage works better than injectJS for dynamic content
-    webviewRef.current.postMessage(payload);
-  }, [markers, customer]);
+    const payloadObj: any = { type: "set-data", data: { center: customer, markers } };
+    if (polylines) payloadObj.data.polylines = polylines;
+    webviewRef.current.postMessage?.(JSON.stringify(payloadObj));
+  }, [markers, customer, polylines]);
 
   const onMessage = (event: any) => {
     try {
@@ -51,6 +56,8 @@ export default function LeafletMap({
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
         const markers = {}; // id -> marker
+        const polylines = {}; // id -> polyline layer
+        let hasInitialized = false; // only fitBounds once on first markers
 
         function setCenter(center) {
           if (!center) return;
@@ -61,6 +68,21 @@ export default function LeafletMap({
           } else {
             markers.__center = L.circleMarker([center.lat, center.lng], { radius:8, color:'#1E90FF' }).addTo(map).bindPopup("You");
           }
+        }
+
+        function setPolylines(newPolylines) {
+          // remove old polylines
+          Object.keys(polylines).forEach(k => {
+            map.removeLayer(polylines[k]);
+            delete polylines[k];
+          });
+          newPolylines.forEach(p => {
+            try {
+              const coords = p.coords.map(c => [c[0], c[1]]);
+              const pl = L.polyline(coords, { color: p.color || '#3388ff' }).addTo(map);
+              polylines[String(p.id)] = pl;
+            } catch (e) {}
+          });
         }
 
         function setMarkers(newMarkers) {
@@ -89,6 +111,17 @@ export default function LeafletMap({
               markers[id] = mk;
             }
           });
+
+          // If we have markers and no explicit center, fit map to markers ONLY on first load
+          try {
+            if (newMarkers.length > 0 && !hasInitialized) {
+              hasInitialized = true;
+              const latlngs = newMarkers.map(m => [m.lat, m.lng]);
+              map.fitBounds(latlngs, { padding: [50, 50] });
+            }
+          } catch (e) {
+            // ignore fit bounds errors
+          }
         }
 
         // Receive messages from React Native
@@ -98,8 +131,10 @@ export default function LeafletMap({
             if (msg.type === 'set-data') {
               const center = msg.data.center;
               const mks = msg.data.markers || [];
+              const pls = msg.data.polylines || [];
               setCenter(center);
               setMarkers(mks);
+              setPolylines(pls);
             }
           } catch(err) {}
         }
@@ -116,7 +151,7 @@ export default function LeafletMap({
     <View style={styles.container}>
       <WebView
         originWhitelist={["*"]}
-        ref={(r) => (webviewRef.current = r)}
+        ref={webviewRef}
         source={{ html }}
         onMessage={onMessage}
         allowFileAccess

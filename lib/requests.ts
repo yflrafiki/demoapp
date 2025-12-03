@@ -19,13 +19,28 @@ export async function createRequest({
   lng?: number | null,
   mechanicId?: string | null
 }) {
+  // If provided, store the customer's latest location on their profile
+  try {
+    if (lat !== null && lng !== null) {
+      await supabase.from("customers").update({ lat: lat, lng: lng }).eq("id", customerId);
+    }
+  } catch (e) {
+    // non-fatal: continue to create request even if customer update fails
+    console.warn("Failed to update customer location:", e);
+  }
+
   const { data, error } = await supabase.from("requests").insert([{
     customer_id: customerId,
     mechanic_id: mechanicId,
     status: "pending",
     description,
+    // store both legacy lat/lng and explicit customer_lat/customer_lng for clarity
     lat: lat ?? null,
     lng: lng ?? null,
+    customer_lat: lat ?? null,
+    customer_lng: lng ?? null,
+    mechanic_lat: null,
+    mechanic_lng: null,
     customer_name: customerName,
     customer_phone: customerPhone,
     car_type: carType,
@@ -83,12 +98,26 @@ export async function getPendingRequestsForMechanic(mechanicId: string) {
 }
 
 export async function acceptRequest(requestId: string, mechanicId: string) {
+  // Try to include mechanic's current coordinates on the request when accepting
+  let mechanicCoords: { lat?: number | null; lng?: number | null } = {};
+  try {
+    const { data: mech } = await supabase.from("mechanics").select("lat,lng").eq("id", mechanicId).single();
+    if (mech) {
+      mechanicCoords.lat = mech.lat ?? null;
+      mechanicCoords.lng = mech.lng ?? null;
+    }
+  } catch (e) {
+    // ignore
+  }
+
   const { data, error } = await supabase
     .from("requests")
     .update({
       mechanic_id: mechanicId,
       status: "accepted",
-      accepted_at: new Date().toISOString()
+      accepted_at: new Date().toISOString(),
+      mechanic_lat: mechanicCoords.lat ?? null,
+      mechanic_lng: mechanicCoords.lng ?? null,
     })
     .eq("id", requestId);
   

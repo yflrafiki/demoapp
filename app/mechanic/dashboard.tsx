@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Linking
 } from "react-native";
+import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "expo-router";
 
@@ -58,6 +59,42 @@ export default function MechanicDashboard() {
 
     init();
 
+    // Start location publish for mechanic when on dashboard
+    let locInterval: any;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: me } = await supabase
+          .from("mechanics")
+          .select("*")
+          .eq("auth_id", user.id)
+          .single();
+
+        if (!me) return;
+
+        const startPublish = async () => {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== "granted") return;
+
+          const loc = await Location.getCurrentPositionAsync({});
+          await supabase
+            .from("mechanics")
+            .update({ lat: loc.coords.latitude, lng: loc.coords.longitude, is_available: true })
+            .eq("id", me.id);
+        };
+
+        // initial publish
+        await startPublish();
+
+        // publish every 10 seconds while dashboard is mounted
+        locInterval = setInterval(startPublish, 10000);
+      } catch (e) {
+        console.log("Failed to publish mechanic location:", e);
+      }
+    })();
+
     let channel: any;
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -88,6 +125,7 @@ export default function MechanicDashboard() {
 
     return () => {
       if (channel) supabase.removeChannel(channel);
+      if (locInterval) clearInterval(locInterval);
     };
   }, []);
 
@@ -99,8 +137,15 @@ export default function MechanicDashboard() {
   };
 
   const acceptRequest = async (item: any) => {
-    await supabase.from("requests").update({ status: "accepted" }).eq("id", item.id);
-    loadProfileAndRequests();
+    try {
+      if (!mechanic?.id) throw new Error("Mechanic not found");
+      const requests = await import("../../lib/requests");
+      await requests.acceptRequest(item.id, mechanic.id);
+      // refresh
+      loadProfileAndRequests();
+    } catch (e: any) {
+      console.warn("acceptRequest failed:", e);
+    }
   };
 
   const rejectRequest = async (item: any) => {
