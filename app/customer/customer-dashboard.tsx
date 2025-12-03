@@ -1,162 +1,289 @@
-import React, { useCallback, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
-  ScrollView,
+  FlatList,
   RefreshControl,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { router, useFocusEffect } from "expo-router";
+import { MechanicRequest } from "../../types/mechanic.types";
+import { getCustomerRequests } from "../../lib/requests";
 
 export default function CustomerDashboard() {
-  const [profile, setProfile] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [requests, setRequests] = useState<MechanicRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    const user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
-
-    const { data } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("auth_id", user.id)
-      .single();
-
-    setProfile(data);
-    setLoading(false);
-  };
+  useEffect(() => {
+    getCurrentUser();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [])
+      if (user?.id) {
+        loadRequests();
+      }
+    }, [user?.id])
   );
+
+  const getCurrentUser = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        setUser(user);
+      }
+    } catch (err: any) {
+      Alert.alert("Error", "Failed to get user");
+    }
+  };
+
+  const loadRequests = async () => {
+    if (!user?.id) return;
+    try {
+      setLoading(true);
+      const data = await getCustomerRequests(user.id);
+      setRequests(data || []);
+    } catch (err: any) {
+      Alert.alert("Error", "Failed to load requests: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await loadRequests();
     setRefreshing(false);
   };
 
-  if (loading)
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.replace("/login");
+    } catch (err: any) {
+      Alert.alert("Error", "Failed to logout");
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "#FFA500";
+      case "accepted":
+        return "#4CAF50";
+      case "completed":
+        return "#2196F3";
+      case "declined":
+        return "#F44336";
+      default:
+        return "#666";
+    }
+  };
+
+  const renderRequest = ({ item }: { item: MechanicRequest }) => (
+    <TouchableOpacity
+      style={styles.requestCard}
+      onPress={() => {
+        router.push({
+          pathname: "/customer/send-request",
+          params: { requestId: item.id },
+        });
+      }}
+    >
+      <View style={styles.requestHeader}>
+        <Text style={styles.carType}>{item.car_type}</Text>
+        <View
+          style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}
+        >
+          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.issue} numberOfLines={2}>
+        {item.issue || item.description}
+      </Text>
+
+      {item.status === "accepted" && (
+        <Text style={styles.mechanicInfo}>
+          Mechanic accepted • {item.accepted_at
+            ? new Date(item.accepted_at).toLocaleDateString()
+            : ""}
+        </Text>
+      )}
+
+      <Text style={styles.createdAt}>
+        {new Date(item.created_at).toLocaleDateString()}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  if (loading && !refreshing) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#1E90FF" />
       </View>
     );
+  }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <Text style={styles.title}>Welcome, {profile?.name}</Text>
-
-      {/* Profile Button */}
-      <TouchableOpacity
-        style={styles.profileBtn}
-        onPress={() => router.push("/customer/profile")}
-      >
-        <Text style={styles.profileText}>View / Edit Profile</Text>
-      </TouchableOpacity>
-
-      {/* Profile Card */}
-      <View style={styles.card}>
-        <Text style={styles.label}>Email</Text>
-        <Text style={styles.value}>{profile?.email}</Text>
-
-        <Text style={styles.label}>Phone</Text>
-        <Text style={styles.value}>{profile?.phone}</Text>
-
-        <Text style={styles.label}>Car Type</Text>
-        <Text style={styles.value}>{profile?.car_type}</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>My Requests</Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* NEW BUTTONS */}
+      <FlatList
+        data={requests}
+        renderItem={renderRequest}
+        keyExtractor={(item) => item.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No requests yet</Text>
+            <Text style={styles.emptySubText}>
+              Tap the button below to request a mechanic
+            </Text>
+          </View>
+        }
+        contentContainerStyle={styles.listContent}
+      />
+
       <TouchableOpacity
-        style={styles.actionBtn}
+        style={styles.fab}
         onPress={() => router.push("/customer/choose-mechanic")}
       >
-        <Text style={styles.actionText}>Find Nearby Mechanics</Text>
+        <Text style={styles.fabText}>+ Request Mechanic</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.actionBtn2}
-        onPress={() => router.push("/customer/send-request")}
-      >
-        <Text style={styles.actionText}>Send Repair Request</Text>
-      </TouchableOpacity>
-
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, marginTop: 40 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 20 },
-
-  profileBtn: {
-    backgroundColor: "#1E90FF",
-    padding: 14,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 20,
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
   },
-  profileText: {
-    color: "white",
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#333",
+  },
+  logoutText: {
+    color: "#FF6B6B",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  requestCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#1E90FF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  requestHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  carType: {
     fontSize: 16,
     fontWeight: "700",
+    color: "#333",
   },
-
-  card: {
-    backgroundColor: "#F4F4F4",
-    padding: 18,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 25,
   },
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#777",
-    marginTop: 10,
-  },
-  value: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-
-  // ★ NEW BUTTON STYLES ★
-  actionBtn: {
-    backgroundColor: "#32CD32",
-    padding: 16,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  actionBtn2: {
-    backgroundColor: "#FF8C00",
-    padding: 16,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 40,
-  },
-  actionText: {
+  statusText: {
     color: "#fff",
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  issue: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+  },
+  mechanicInfo: {
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  createdAt: {
+    fontSize: 12,
+    color: "#999",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: "#999",
+  },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    backgroundColor: "#1E90FF",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { supabase } from "../lib/supabase";
 import { router } from "expo-router";
 
@@ -8,59 +16,76 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const formatMechanicPhoneToEmail = (input: string) => {
+    // remove non-digits
+    let phone = input.replace(/\D/g, "");
+
+    // Ghana format: 024xxxxxxx → convert to email
+    if (phone.length === 10 && phone.startsWith("0")) {
+      return `${phone}@mech.auto`;
+    }
+
+    // If user typed full email already
+    if (input.includes("@")) return input;
+
+    // If digits only but not 10 digits
+    return `${phone}@mech.auto`; 
+  };
+
   const handleLogin = async () => {
-    if (loading) return;
-    setLoading(true);
     if (!emailOrPhone || !password) {
-      Alert.alert("Enter credentials");
-      setLoading(false);
+      Alert.alert("Enter your details");
       return;
     }
 
-    try {
-      let email = emailOrPhone;
+    setLoading(true);
 
-      // Map phone number to fallback email if needed (mechanic signup path)
-      if (/^\d+$/.test(emailOrPhone)) {
-        email = `${emailOrPhone}@mech.auto`;
+    try {
+      await supabase.auth.signOut();
+      
+      let email = emailOrPhone.trim();
+
+      // If mechanic is logging in with phone number — convert to mech email
+      if (!email.includes("@")) {
+        email = formatMechanicPhoneToEmail(emailOrPhone);
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
 
       if (error) throw error;
 
       const userId = data.user.id;
 
-      // Check customer profile
-      const { data: customers } = await supabase
+      // Check if customer
+      const { data: customer } = await supabase
         .from("customers")
         .select("*")
         .eq("auth_id", userId)
-        .limit(1);
+        .maybeSingle();
 
-      if (customers?.length) {
+      if (customer) {
         router.replace("/customer/customer-dashboard");
         return;
       }
 
-      // Check mechanic profile
-      const { data: mechanics } = await supabase
+      // Check if mechanic
+      const { data: mechanic } = await supabase
         .from("mechanics")
         .select("*")
         .eq("auth_id", userId)
-        .limit(1);
+        .maybeSingle();
 
-      if (mechanics?.length) {
+      if (mechanic) {
         router.replace("/mechanic/dashboard");
         return;
       }
 
-      Alert.alert("No profile linked");
+      Alert.alert("No profile found for this account");
     } catch (err: any) {
-      Alert.alert("Login error", err.message || String(err));
+      Alert.alert("Login error", err.message);
     } finally {
       setLoading(false);
     }
@@ -87,38 +112,31 @@ export default function LoginScreen() {
 
       <TouchableOpacity
         style={[styles.button, loading && { opacity: 0.7 }]}
-        onPress={handleLogin}
         disabled={loading}
+        onPress={handleLogin}
       >
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
-      {/* NEW TEXT ADDED BELOW BUTTON */}
       <TouchableOpacity onPress={() => router.push("/auth/select-role")}>
         <Text style={styles.link}>
           Don't have an account? <Text style={styles.linkBold}>Create one</Text>
         </Text>
       </TouchableOpacity>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container:{ flex:1, padding:24, justifyContent:"center", backgroundColor:"#fff" },
-  header:{ fontSize:28, fontWeight:"700", marginBottom:20, textAlign:"center" },
+  header:{ fontSize:28, fontWeight:"700", textAlign:"center", marginBottom:20 },
   input:{ borderWidth:1, borderColor:"#ccc", padding:12, borderRadius:8, marginBottom:12 },
   button:{ backgroundColor:"#1E90FF", padding:14, borderRadius:8, alignItems:"center" },
   buttonText:{ color:"#fff", fontWeight:"700" },
-
-  link: {
-    marginTop: 18,
-    textAlign: "center",
-    color: "#555",
-    fontSize: 14,
-  },
-  linkBold: {
-    color: "#1E90FF",
-    fontWeight: "700",
-  }
+  link:{ marginTop:18, textAlign:"center", color:"#555" },
+  linkBold:{ color:"#1E90FF", fontWeight:"700" }
 });

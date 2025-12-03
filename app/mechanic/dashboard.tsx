@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
   Linking
 } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -15,10 +16,11 @@ export default function MechanicDashboard() {
   const [mechanic, setMechanic] = useState<any>(null);
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [refreshing, setRefreshing] = useState(false); // ⭐ NEW
   const router = useRouter();
 
   const loadProfileAndRequests = async () => {
-    setLoading(true);
     const user = (await supabase.auth.getUser()).data.user;
     if (!user) {
       router.replace("/login");
@@ -45,15 +47,22 @@ export default function MechanicDashboard() {
       .eq("status", "pending");
 
     setRequests(reqs || []);
-    setLoading(false);
   };
 
   useEffect(() => {
-    loadProfileAndRequests();
+    const init = async () => {
+      setLoading(true);
+      await loadProfileAndRequests();
+      setLoading(false);
+    };
+
+    init();
 
     let channel: any;
     (async () => {
-      const user = (await supabase.auth.getUser()).data.user;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
       const { data: me } = await supabase
         .from("mechanics")
         .select("*")
@@ -72,7 +81,7 @@ export default function MechanicDashboard() {
             table: "requests",
             filter: `mechanic_id=eq.${me.id}`
           },
-          () => loadProfileAndRequests()
+          loadProfileAndRequests
         )
         .subscribe();
     })();
@@ -81,6 +90,13 @@ export default function MechanicDashboard() {
       if (channel) supabase.removeChannel(channel);
     };
   }, []);
+
+  // ⭐ NEW REFRESH HANDLER
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadProfileAndRequests();
+    setRefreshing(false);
+  };
 
   const acceptRequest = async (item: any) => {
     await supabase.from("requests").update({ status: "accepted" }).eq("id", item.id);
@@ -114,50 +130,61 @@ export default function MechanicDashboard() {
         <Text style={styles.profileSubtitle}>Edit details or log out</Text>
       </TouchableOpacity>
 
+      {/* Map Button */}
+      <TouchableOpacity
+        style={styles.mapCard}
+        onPress={() => router.push("/mechanic/map-view")}
+      >
+        <Text style={styles.mapTitle}>Open Map & Live Requests</Text>
+        <Text style={styles.mapSubtitle}>View customer location & accept requests</Text>
+      </TouchableOpacity>
+
       {/* Requests Section */}
       <Text style={styles.section}>Incoming Requests</Text>
 
-      {requests.length === 0 ? (
-        <Text style={styles.empty}>No pending requests</Text>
-      ) : (
-        <FlatList
-          data={requests}
-          keyExtractor={(i) => i.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{item.customer_name}</Text>
-              <Text style={styles.cardMeta}>
-                {item.car_type} • {item.description}
-              </Text>
+      <FlatList
+        data={requests}
+        keyExtractor={(i) => i.id.toString()}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> // ⭐ ADDED
+        }
+        ListEmptyComponent={
+          <Text style={styles.empty}>No pending requests</Text>
+        }
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{item.customer_name}</Text>
+            <Text style={styles.cardMeta}>
+              {item.car_type} • {item.description}
+            </Text>
 
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={styles.mapBtn}
-                  onPress={() =>
-                    Linking.openURL(`https://www.google.com/maps?q=${item.lat},${item.lng}`)
-                  }
-                >
-                  <Text style={styles.btnText}>Map</Text>
-                </TouchableOpacity>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={styles.mapBtn}
+                onPress={() =>
+                  Linking.openURL(`https://www.google.com/maps?q=${item.lat},${item.lng}`)
+                }
+              >
+                <Text style={styles.btnText}>Map</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.acceptBtn}
-                  onPress={() => acceptRequest(item)}
-                >
-                  <Text style={styles.btnText}>Accept</Text>
-                </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.acceptBtn}
+                onPress={() => acceptRequest(item)}
+              >
+                <Text style={styles.btnText}>Accept</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.rejectBtn}
-                  onPress={() => rejectRequest(item)}
-                >
-                  <Text style={styles.btnText}>Reject</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.rejectBtn}
+                onPress={() => rejectRequest(item)}
+              >
+                <Text style={styles.btnText}>Reject</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        />
-      )}
+          </View>
+        )}
+      />
     </View>
   );
 }
@@ -167,34 +194,35 @@ const styles = StyleSheet.create({
     flex: 1, 
     padding: 20, 
     marginTop: 40 
-   },
+  },
   center: { 
     flex: 1, 
     justifyContent: "center", 
     alignItems: "center" 
   },
-  welcome: { 
-    fontSize: 20, 
-    color: "#666" 
-  },
-  name: { 
-    fontSize: 28, 
-    fontWeight: "700", 
-    marginBottom: 20 
-  },
+  welcome: { fontSize: 20, color: "#666" },
+  name: { fontSize: 28, fontWeight: "700", marginBottom: 20 },
 
   profileCard: {
     backgroundColor: "#1E90FF",
     padding: 20,
     borderRadius: 12,
-    marginBottom: 30
+    marginBottom: 20
   },
-  profileTitle: { 
-    color: "#fff", fontSize: 20, fontWeight: "700" },
+  profileTitle: { color: "#fff", fontSize: 20, fontWeight: "700" },
   profileSubtitle: { color: "#eee", fontSize: 14, marginTop: 4 },
 
+  mapCard: {
+    backgroundColor: "#4CAF50",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 30
+  },
+  mapTitle: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  mapSubtitle: { color: "#eee", fontSize: 14, marginTop: 4 },
+
   section: { fontSize: 20, fontWeight: "700", marginBottom: 12 },
-  empty: { fontSize: 16, color: "#777" },
+  empty: { fontSize: 16, color: "#777", textAlign: "center", marginTop: 10 },
 
   card: {
     backgroundColor: "#fff",

@@ -1,194 +1,428 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  ScrollView,
+} from "react-native";
 import * as Location from "expo-location";
-import LeafletMap from "../components/LeafletMap";
 import { supabase } from "../../lib/supabase";
-import { router } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
+import { Mechanic } from "../../types/mechanic.types";
 
 export default function ChooseMechanic() {
+  const [customer, setCustomer] = useState<any>(null);
+  const [mechanics, setMechanics] = useState<Mechanic[]>([]);
   const [customerLocation, setCustomerLocation] = useState<any>(null);
-  const [mechanics, setMechanics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<any>(null);
-
-  const loadMechanics = async () => {
-    const { data } = await supabase.from("mechanics").select("*");
-
-    if (!data) {
-      Alert.alert("Error", "Failed to load mechanics");
-      return;
-    }
-
-    // Filter only mechanics with location
-    const filtered = data.filter(
-      (m) => m.lat && m.lng
-    );
-
-    setMechanics(filtered);
-  };
-
-  const getCustomerLocation = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission Denied", "Enable location to continue.");
-      return;
-    }
-
-    const loc = await Location.getCurrentPositionAsync({});
-    setCustomerLocation({
-      lat: loc.coords.latitude,
-      lng: loc.coords.longitude
-    });
-  };
-
-  const loadAll = async () => {
-    setLoading(true);
-    await getCustomerLocation();
-    await loadMechanics();
-    setLoading(false);
-  };
+  const [selectedMechanic, setSelectedMechanic] = useState<Mechanic | null>(null);
 
   useEffect(() => {
-    loadAll();
+    loadData();
   }, []);
 
-  const sendRequest = async () => {
-    if (!selected) return;
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
-    const user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      router.replace("/login");
-      return;
-    }
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    // fetch customer profile
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("auth_id", user.id)
-      .single();
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
 
-    if (!customer) {
-      Alert.alert("Profile error");
-      return;
-    }
+      // Get customer profile
+      const { data: customerData } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("auth_id", user.id)
+        .single();
 
-    const { error } = await supabase.from("requests").insert({
-      customer_id: customer.id,
-      customer_name: customer.name,
-      car_type: customer.car_type,
-      mechanic_id: selected.id,
-      lat: customerLocation.lat,
-      lng: customerLocation.lng,
-      description: "Need service",
-      status: "pending"
-    });
+      setCustomer(customerData);
 
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      Alert.alert("Success", "Request sent to mechanic!");
-      router.push("/customer/customer-dashboard");
+      // Get current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const loc = await Location.getCurrentPositionAsync({});
+        setCustomerLocation({
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+        });
+      }
+
+      // Get all available mechanics
+      const { data: mechanicsData } = await supabase
+        .from("mechanics")
+        .select("*")
+        .eq("is_available", true)
+        .order("created_at", { ascending: false });
+
+      setMechanics(mechanicsData || []);
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading || !customerLocation)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return (R * c).toFixed(1);
+  };
+
+  const handleSelectMechanic = (mechanic: Mechanic) => {
+    setSelectedMechanic(mechanic);
+  };
+
+  const handleProceedToRequest = () => {
+    if (!selectedMechanic) {
+      Alert.alert("Error", "Please select a mechanic first");
+      return;
+    }
+
+    router.push({
+      pathname: "/customer/send-request",
+      params: { mechanicId: selectedMechanic.id },
+    });
+  };
+
+  if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-        <Text>Loading nearby mechanics...</Text>
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#1E90FF" />
+        <Text style={styles.loadingText}>Finding nearby mechanics...</Text>
       </View>
     );
+  }
+
+  if (selectedMechanic) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setSelectedMechanic(null)}>
+            <Text style={styles.backText}>← Back to List</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Mechanic Details</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView style={styles.detailsContainer}>
+          <View style={styles.detailCard}>
+            <Text style={styles.sectionTitle}>Basic Information</Text>
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Name:</Text>
+              <Text style={styles.value}>{selectedMechanic.name}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Phone:</Text>
+              <Text style={styles.value}>{selectedMechanic.phone}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.label}>Specialization:</Text>
+              <Text style={styles.value}>{selectedMechanic.specialization}</Text>
+            </View>
+          </View>
+
+          {selectedMechanic.rating && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Rating</Text>
+              <Text style={styles.ratingText}>
+                ⭐ {selectedMechanic.rating.toFixed(1)} / 5.0
+              </Text>
+            </View>
+          )}
+
+          {customerLocation && selectedMechanic.lat && selectedMechanic.lng && (
+            <View style={styles.detailCard}>
+              <Text style={styles.sectionTitle}>Distance</Text>
+              <Text style={styles.distance}>
+                {calculateDistance(
+                  customerLocation.lat,
+                  customerLocation.lng,
+                  selectedMechanic.lat,
+                  selectedMechanic.lng
+                )}{" "}
+                km away
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={handleProceedToRequest}
+          >
+            <Text style={styles.confirmButtonText}>Send Request to {selectedMechanic.name}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Map */}
-      <View style={styles.mapWrapper}>
-        <LeafletMap
-          customer={customerLocation}
-          markers={mechanics.map((m) => ({
-            id: m.id,
-            lat: m.lat,
-            lng: m.lng
-          }))}
-          onMarkerPress={(id) => {
-            const mech = mechanics.find((m) => m.id === id);
-            setSelected(mech);
-          }}
-        />
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Select a Mechanic</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Bottom Preview */}
-      {selected && (
-        <View style={styles.bottomSheet}>
-          <Text style={styles.name}>{selected.name}</Text>
-          <Text style={styles.service}>{selected.service_type}</Text>
-          <Text style={styles.phone}>📞 {selected.phone}</Text>
+      <FlatList
+        data={mechanics}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => {
+          const distance =
+            customerLocation && item.lat && item.lng
+              ? calculateDistance(
+                  customerLocation.lat,
+                  customerLocation.lng,
+                  item.lat,
+                  item.lng
+                )
+              : null;
 
-          <TouchableOpacity style={styles.sendBtn} onPress={sendRequest}>
-            <Text style={styles.sendText}>Send Request</Text>
-          </TouchableOpacity>
+          return (
+            <TouchableOpacity
+              style={styles.mechanicCard}
+              onPress={() => handleSelectMechanic(item)}
+            >
+              <View style={styles.mechanicHeader}>
+                <View style={styles.mechanicInfo}>
+                  <Text style={styles.mechanicName}>{item.name}</Text>
+                  <Text style={styles.specialization}>{item.specialization}</Text>
+                </View>
+                {item.rating && (
+                  <Text style={styles.rating}>⭐ {item.rating.toFixed(1)}</Text>
+                )}
+              </View>
 
-          <TouchableOpacity onPress={() => setSelected(null)}>
-            <Text style={styles.close}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+              <View style={styles.mechanicDetails}>
+                <Text style={styles.phone}>📞 {item.phone}</Text>
+                {distance && (
+                  <Text style={styles.distanceText}>{distance} km away</Text>
+                )}
+                <View
+                  style={[
+                    styles.availabilityBadge,
+                    { backgroundColor: item.is_available ? "#4CAF50" : "#999" },
+                  ]}
+                >
+                  <Text style={styles.availabilityText}>
+                    {item.is_available ? "Available" : "Unavailable"}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No mechanics available</Text>
+            <Text style={styles.emptySubText}>
+              Please try again later
+            </Text>
+          </View>
+        }
+        contentContainerStyle={styles.listContent}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-
-  mapWrapper: { flex: 1 },
-
-  bottomSheet: {
-    width: "100%",
-    backgroundColor: "#fff",
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    elevation: 10
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
   },
-
-  name: {
-    fontSize: 22,
-    fontWeight: "700"
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
   },
-
-  service: {
+  loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    color: "#555",
-    marginTop: 4
+    color: "#666",
   },
-
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  backText: {
+    color: "#1E90FF",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#333",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  mechanicCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#1E90FF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mechanicHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  mechanicInfo: {
+    flex: 1,
+  },
+  mechanicName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 4,
+  },
+  specialization: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "500",
+  },
+  rating: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FF9800",
+  },
+  mechanicDetails: {
+    gap: 8,
+  },
   phone: {
+    fontSize: 13,
+    color: "#1E90FF",
+    fontWeight: "600",
+  },
+  distanceText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "600",
+  },
+  availabilityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  availabilityText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: "#999",
+  },
+  detailsContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  detailCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  label: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "600",
+  },
+  value: {
     fontSize: 14,
     color: "#333",
-    marginVertical: 8
+    fontWeight: "500",
+    flex: 1,
+    textAlign: "right",
   },
-
-  sendBtn: {
-    backgroundColor: "#1E90FF",
-    padding: 14,
-    borderRadius: 10,
+  ratingText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FF9800",
+  },
+  distance: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E90FF",
+  },
+  confirmButton: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: "center",
-    marginTop: 10
+    marginBottom: 24,
   },
-
-  sendText: {
+  confirmButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "700"
+    fontWeight: "700",
   },
-
-  close: {
-    textAlign: "center",
-    marginTop: 10,
-    color: "#888"
-  }
 });
