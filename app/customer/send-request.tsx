@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from "react-native";
 import * as Location from "expo-location";
+import LeafletMap from "../components/LeafletMap";
 import { supabase } from "../../lib/supabase";
 import { useLocalSearchParams, router } from "expo-router";
 import { createRequest } from "../../lib/requests";
@@ -20,6 +21,9 @@ export default function SendRequest() {
   const [customer, setCustomer] = useState<any>(null);
   const [request, setRequest] = useState<MechanicRequest | null>(null);
   const [customerLocation, setCustomerLocation] = useState<any>(null);
+  const [mechanic, setMechanic] = useState<any>(null);
+  const [mechanicLocation, setMechanicLocation] = useState<any>(null);
+  const [placeName, setPlaceName] = useState<string | null>(null);
   const [carType, setCarType] = useState("");
   const [issue, setIssue] = useState("");
   const [loading, setLoading] = useState(true);
@@ -28,6 +32,81 @@ export default function SendRequest() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!requestId) return;
+    let mounted = true;
+    let channel: any;
+
+    (async () => {
+      try {
+        // subscribe to request updates
+        channel = supabase
+          .channel(`public:requests:${requestId}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'requests', filter: `id=eq.${requestId}` },
+            (payload: any) => {
+              if (!mounted) return;
+              if (payload.new) setRequest(payload.new as MechanicRequest);
+              // if mechanic location included in request, update
+              if (payload.new?.mechanic_lat && payload.new?.mechanic_lng) {
+                setMechanicLocation({ lat: Number(payload.new.mechanic_lat), lng: Number(payload.new.mechanic_lng) });
+              }
+            }
+          )
+          .subscribe();
+
+        // also subscribe to mechanic row when assigned
+        const currentReq = requestId ? (await supabase.from('requests').select('*').eq('id', requestId).single()).data : null;
+        const mechId = currentReq?.mechanic_id;
+        if (mechId) {
+          const mechChannel = supabase
+            .channel(`public:mechanics:${mechId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mechanics', filter: `id=eq.${mechId}` }, (payload: any) => {
+              if (!mounted) return;
+              setMechanic(payload.new);
+              if (payload.new?.lat && payload.new?.lng) setMechanicLocation({ lat: Number(payload.new.lat), lng: Number(payload.new.lng) });
+            })
+            .subscribe();
+
+          // attach to main channel cleanup
+          channel = channel; // keep reference
+        }
+      } catch (e) {
+        console.log('customer request subscribe failed', e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [requestId]);
+
+  // Reverse geocode helper (small, uses Nominatim)
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'demoapp/1.0' } });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.display_name || null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (mechanicLocation?.lat && mechanicLocation?.lng) {
+        const n = await reverseGeocode(mechanicLocation.lat, mechanicLocation.lng);
+        if (active) setPlaceName(n);
+      }
+    })();
+    return () => { active = false; };
+  }, [mechanicLocation]);
 
   const loadData = async () => {
     try {
@@ -62,6 +141,14 @@ export default function SendRequest() {
           setRequest(reqData);
           setCarType(reqData.car_type || "");
           setIssue(reqData.description || reqData.issue || "");
+          // if mechanic is already assigned and has coords, show them
+          if (reqData.mechanic_lat && reqData.mechanic_lng) {
+            setMechanicLocation({ lat: Number(reqData.mechanic_lat), lng: Number(reqData.mechanic_lng) });
+          }
+          if (reqData.mechanic_id) {
+            const { data: mech } = await supabase.from('mechanics').select('*').eq('id', reqData.mechanic_id).single();
+            if (mech) setMechanic(mech);
+          }
         }
       }
 
@@ -132,6 +219,29 @@ export default function SendRequest() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!requestId || !request) return;
+    Alert.alert('Cancel Request', 'Are you sure you want to cancel this request?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setSending(true);
+            await supabase.from('requests').update({ status: 'declined' }).eq('id', requestId);
+            Alert.alert('Cancelled', 'Your request was cancelled.');
+            router.replace('/customer/customer-dashboard');
+          } catch (e: any) {
+            Alert.alert('Error', e.message || String(e));
+          } finally {
+            setSending(false);
+          }
+        }
+      }
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -159,10 +269,29 @@ export default function SendRequest() {
           <Text style={styles.info}>Phone: {customer?.phone}</Text>
           {customerLocation && (
             <Text style={styles.info}>
-              Location: {customerLocation.lat.toFixed(4)}, {customerLocation.lng.toFixed(4)}
+                  Location: {customerLocation.lat.toFixed(4)}, {customerLocation.lng.toFixed(4)}
             </Text>
           )}
         </View>
+
+          {/* Live map when mechanic assigned/accepted */}
+          {request?.status === 'accepted' && (
+            <View style={{ height: 300, marginHorizontal: 16, marginBottom: 16 }}>
+              <LeafletMap
+                customer={customerLocation}
+                markers={[
+                  ...(customerLocation ? [{ id: 'customer', lat: customerLocation.lat, lng: customerLocation.lng, title: customer?.name || 'You' }] : []),
+                  ...(mechanicLocation ? [{ id: 'mechanic', lat: mechanicLocation.lat, lng: mechanicLocation.lng, title: placeName || mechanic?.name || 'Mechanic' }] : []),
+                ]}
+                polylines={mechanicLocation && customerLocation ? [{ id: 'route', coords: [[mechanicLocation.lat, mechanicLocation.lng], [customerLocation.lat, customerLocation.lng]], color: '#FF6B35' }] : []}
+              />
+
+              <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+                <Text style={{ color: '#333', fontWeight: '600' }}>Mechanic: {mechanic?.name || 'Assigned'}</Text>
+                {placeName ? <Text style={{ color: '#666' }}>{placeName}</Text> : mechanicLocation ? <Text style={{ color: '#666' }}>{mechanicLocation.lat.toFixed(4)}, {mechanicLocation.lng.toFixed(4)}</Text> : null}
+              </View>
+            </View>
+          )}
 
         <Text style={styles.label}>Car Type</Text>
         <TextInput
@@ -197,6 +326,16 @@ export default function SendRequest() {
             </Text>
           )}
         </TouchableOpacity>
+
+        {requestId && (
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: '#F44336', marginTop: 8 }]}
+            onPress={handleDelete}
+            disabled={sending}
+          >
+            {sending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Cancel Request</Text>}
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );

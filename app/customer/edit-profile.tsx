@@ -42,29 +42,31 @@ export default function EditCustomerProfile() {
   }, []);
 
   const save = async () => {
-    if (!profile.name || !profile.phone || !profile.car_type) {
+    if (!profile?.name?.trim() || !profile?.phone?.trim() || !profile?.car_type?.trim()) {
       Alert.alert("Error", "All fields are required.");
       return;
     }
 
     setSaving(true);
 
-    const { error } = await supabase
-      .from("customers")
-      .update({
-        name: profile.name,
-        phone: profile.phone,
-        car_type: profile.car_type,
-      })
-      .eq("id", profile.id);
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({
+          name: profile.name.trim(),
+          phone: profile.phone.trim(),
+          car_type: profile.car_type.trim(),
+        })
+        .eq("id", profile.id);
 
-    setSaving(false);
+      if (error) throw error;
 
-    if (error) {
-      Alert.alert("Update Failed", error.message);
-    } else {
       Alert.alert("Success", "Profile updated!");
       router.back(); // go back to profile
+    } catch (err: any) {
+      Alert.alert("Update Failed", err.message || String(err));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -81,24 +83,27 @@ export default function EditCustomerProfile() {
 
       <Text style={styles.label}>Name</Text>
       <TextInput
-        value={profile.name}
+        value={profile?.name || ""}
         onChangeText={(t) => setProfile({ ...profile, name: t })}
         style={styles.input}
+        editable={!saving}
       />
 
       <Text style={styles.label}>Phone</Text>
       <TextInput
-        value={profile.phone}
+        value={profile?.phone || ""}
         onChangeText={(t) => setProfile({ ...profile, phone: t })}
         style={styles.input}
         keyboardType="phone-pad"
+        editable={!saving}
       />
 
       <Text style={styles.label}>Car Type</Text>
       <TextInput
-        value={profile.car_type}
+        value={profile?.car_type || ""}
         onChangeText={(t) => setProfile({ ...profile, car_type: t })}
         style={styles.input}
+        editable={!saving}
       />
 
       <TouchableOpacity

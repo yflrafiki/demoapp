@@ -54,21 +54,47 @@ export default function MechanicProfile() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Mechanic Profile</Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backBtn}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>My Profile</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
       {/* Main Profile Card */}
       <View style={styles.card}>
-        <Text style={styles.label}>Name</Text>
-        <Text style={styles.value}>{profile?.name}</Text>
+        <View style={styles.profileSection}>
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          
+          <View style={styles.field}>
+            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.value}>{profile?.name || 'N/A'}</Text>
+          </View>
 
-        <Text style={styles.label}>Phone</Text>
-        <Text style={styles.value}>{profile?.phone}</Text>
+          <View style={styles.field}>
+            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.value}>{profile?.phone || 'N/A'}</Text>
+          </View>
+        </View>
 
-        <Text style={styles.label}>Email</Text>
-        <Text style={styles.value}>{profile?.email}</Text>
+        <View style={styles.divider} />
 
-        <Text style={styles.label}>Service Type</Text>
-        <Text style={styles.value}>{profile?.service}</Text>
+        <View style={styles.profileSection}>
+          <Text style={styles.sectionTitle}>Service Information</Text>
+          
+          <View style={styles.field}>
+            <Text style={styles.label}>Service Type</Text>
+            <Text style={styles.value}>{profile?.service_type || 'Not specified'}</Text>
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Availability</Text>
+            <Text style={[styles.value, { color: profile?.is_available ? '#4CAF50' : '#FF9800' }]}>
+              {profile?.is_available ? '🟢 Available' : '🔴 Unavailable'}
+            </Text>
+          </View>
+        </View>
       </View>
 
       {/* Edit Button */}
@@ -88,57 +114,102 @@ export default function MechanicProfile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#F9F9F9" },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 
   header: {
-    fontSize: 28,
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+
+  backBtn: {
+    color: "#1E90FF",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+
+  title: {
+    fontSize: 20,
     fontWeight: "700",
-    marginBottom: 20
+    color: "#333",
   },
 
   card: {
     backgroundColor: "#fff",
-    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
     borderRadius: 12,
-    marginBottom: 30,
-    elevation: 2
+    elevation: 2,
+  },
+
+  profileSection: {
+    padding: 16,
+  },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E90FF",
+    textTransform: "uppercase",
+    marginBottom: 12,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#eee",
+  },
+
+  field: {
+    marginBottom: 12,
   },
 
   label: {
-    fontSize: 14,
-    color: "#888",
-    marginTop: 10
+    fontSize: 12,
+    color: "#999",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    marginBottom: 4,
   },
 
   value: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    marginTop: 4
+    color: "#333",
   },
 
   editBtn: {
     backgroundColor: "#1E90FF",
+    marginHorizontal: 16,
+    marginTop: 20,
     padding: 14,
     borderRadius: 10,
     alignItems: "center",
-    marginBottom: 16
   },
   editText: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 16
+    fontSize: 16,
   },
 
   logoutBtn: {
-    backgroundColor: "red",
+    backgroundColor: "#FF6B6B",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 20,
     padding: 14,
     borderRadius: 10,
-    alignItems: "center"
+    alignItems: "center",
   },
   logoutText: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 16
-  }
+    fontSize: 16,
+  },
 });

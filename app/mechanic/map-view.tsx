@@ -291,12 +291,21 @@ export default function MechanicMap() {
           </TouchableOpacity>
 
           <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity
-              style={styles.acceptButton}
-              onPress={() => handleAcceptRequest(selectedRequest)}
-            >
-              <Text style={styles.actionButtonText}>Accept Request</Text>
-            </TouchableOpacity>
+            {selectedRequest.status === 'pending' ? (
+              <TouchableOpacity
+                style={styles.acceptButton}
+                onPress={() => handleAcceptRequest(selectedRequest)}
+              >
+                <Text style={styles.actionButtonText}>Accept Request</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.acceptButton, { backgroundColor: '#1976D2' }]}
+                onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: selectedRequest.id } })}
+              >
+                <Text style={styles.actionButtonText}>Continue Navigation</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.declineButton}
@@ -365,12 +374,22 @@ export default function MechanicMap() {
               >
                 <Text style={styles.quickButtonText}>Navigate</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickButton}
-                onPress={() => handleAcceptRequest(item)}
-              >
-                <Text style={styles.quickButtonText}>Accept</Text>
-              </TouchableOpacity>
+              {item.status === 'pending' ? (
+                <TouchableOpacity
+                  style={styles.quickButton}
+                  onPress={() => handleAcceptRequest(item)}
+                >
+                  <Text style={styles.quickButtonText}>Accept</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.quickButton, { backgroundColor: '#1976D2' }]}
+                  onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: item.id } })}
+                >
+                  <Text style={styles.quickButtonText}>Continue</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={styles.quickButtonDanger}
                 onPress={() => handleDeclineRequest(item)}

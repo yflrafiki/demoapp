@@ -16,7 +16,7 @@ export default function MechanicNavigation() {
   useEffect(() => {
     if (!requestId) return;
     let mounted = true;
-    let locationInterval: any;
+    let watcher: any = null;
     let channel: any;
 
     const init = async () => {
@@ -84,38 +84,88 @@ export default function MechanicNavigation() {
       }
     })();
 
-    // Publish location every 30s instead of 5s (reduce DB load)
+    // Use watchPositionAsync to get continuous updates and publish immediately
     (async () => {
-      const publishLocation = async () => {
-        try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === "granted") {
-            const loc = await Location.getCurrentPositionAsync({});
-            if (mounted) {
-              setMechanicLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-              if (requestId) {
-                await updateRequestLocation(requestId as string, loc.coords.latitude, loc.coords.longitude, true);
-              }
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+
+        // get last known position first
+        const last = await Location.getCurrentPositionAsync({});
+        if (mounted && last) {
+          setMechanicLocation({ lat: last.coords.latitude, lng: last.coords.longitude });
+          if (requestId) {
+            await updateRequestLocation(requestId as string, last.coords.latitude, last.coords.longitude, true);
+          }
+        }
+
+        // watch position for live updates
+        watcher = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Highest, timeInterval: 5000, distanceInterval: 2 },
+          async (loc) => {
+            if (!mounted || !loc) return;
+            const lat = loc.coords.latitude;
+            const lng = loc.coords.longitude;
+            setMechanicLocation({ lat, lng });
+            try {
+              if (requestId) await updateRequestLocation(requestId as string, lat, lng, true);
+            } catch (e) {
+              // ignore publish errors but keep watching
             }
           }
-        } catch (e) {
-          // ignore location errors
-        }
-      };
-
-      // Publish immediately on mount
-      await publishLocation();
-
-      // Then every 30s
-      locationInterval = setInterval(publishLocation, 30000);
+        );
+      } catch (e) {
+        // ignore location errors
+      }
     })();
 
     return () => {
       mounted = false;
       if (channel) supabase.removeChannel(channel);
-      if (locationInterval) clearInterval(locationInterval);
+      if (watcher && typeof watcher.remove === "function") watcher.remove();
     };
   }, [requestId]);
+
+  // Reverse geocoding for nicer labels
+  const [mechanicPlaceName, setMechanicPlaceName] = useState<string | null>(null);
+  const [customerPlaceName, setCustomerPlaceName] = useState<string | null>(null);
+
+  const reverseGeocode = async (lat: number, lng: number) => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`;
+      const res = await fetch(url, { headers: { "User-Agent": "demoapp/1.0" } });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.display_name || null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Update place names when coordinates change
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (mechanicLocation?.lat && mechanicLocation?.lng) {
+        const name = await reverseGeocode(mechanicLocation.lat, mechanicLocation.lng);
+        if (active) setMechanicPlaceName(name);
+      }
+    })();
+    return () => { active = false; };
+  }, [mechanicLocation]);
+
+  useEffect(() => {
+    let active = true;
+    const custLat = request?.customer_lat ?? request?.lat ?? null;
+    const custLng = request?.customer_lng ?? request?.lng ?? null;
+    (async () => {
+      if (custLat && custLng) {
+        const name = await reverseGeocode(Number(custLat), Number(custLng));
+        if (active) setCustomerPlaceName(name);
+      }
+    })();
+    return () => { active = false; };
+  }, [request?.customer_lat, request?.customer_lng, request?.lat, request?.lng]);
 
   const markers = [] as any[];
   // customer marker from request

@@ -144,7 +144,25 @@ export default function CustomerDashboard() {
     if (!user?.id) return;
     try {
       const data = await getCustomerRequests(user.id);
-      setRequests(data || []);
+      // Enrich requests with mechanic name/phone if accepted
+      if (data && data.length > 0) {
+        const enriched = await Promise.all(
+          data.map(async (req: any) => {
+            if (req.mechanic_id) {
+              try {
+                const { data: mech } = await supabase.from('mechanics').select('name, phone').eq('id', req.mechanic_id).single();
+                return { ...req, mechanic_name: mech?.name, mechanic_phone: mech?.phone };
+              } catch (e) {
+                return req;
+              }
+            }
+            return req;
+          })
+        );
+        setRequests(enriched || []);
+      } else {
+        setRequests(data || []);
+      }
     } catch (err: any) {
       if (!refreshing) Alert.alert("Error", "Failed to load requests: " + err.message);
     } finally {
@@ -182,16 +200,27 @@ export default function CustomerDashboard() {
     }
   };
 
-  const renderRequest = ({ item }: { item: MechanicRequest }) => (
-    <TouchableOpacity
-      style={styles.requestCard}
-      onPress={() => {
-        router.push({
-          pathname: "/customer/send-request",
-          params: { requestId: item.id },
-        });
-      }}
-    >
+  const handleCancelRequest = async (requestId: string) => {
+    Alert.alert('Cancel Request', 'Are you sure you want to cancel this request?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await supabase.from('requests').update({ status: 'declined' }).eq('id', requestId);
+            Alert.alert('Cancelled', 'Your request was cancelled.');
+            loadRequests();
+          } catch (e: any) {
+            Alert.alert('Error', e.message || String(e));
+          }
+        }
+      }
+    ]);
+  };
+
+  const renderRequest = ({ item }: { item: any }) => (
+    <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <Text style={styles.carType}>{item.car_type}</Text>
         <View
@@ -205,18 +234,44 @@ export default function CustomerDashboard() {
         {item.issue || item.description}
       </Text>
 
-      {item.status === "accepted" && (
-        <Text style={styles.mechanicInfo}>
-          Mechanic accepted • {item.accepted_at
-            ? new Date(item.accepted_at).toLocaleDateString()
-            : ""}
-        </Text>
+      {item.status === "accepted" && item.mechanic_name && (
+        <View style={styles.mechanicCard}>
+          <Text style={styles.mechanicLabel}>Assigned Mechanic</Text>
+          <Text style={styles.mechanicName}>{item.mechanic_name}</Text>
+          {item.mechanic_phone && <Text style={styles.mechanicPhone}>📞 {item.mechanic_phone}</Text>}
+          <Text style={styles.acceptedTime}>
+            Accepted • {item.accepted_at ? new Date(item.accepted_at).toLocaleDateString() : ""}
+          </Text>
+        </View>
       )}
 
       <Text style={styles.createdAt}>
         {new Date(item.created_at).toLocaleDateString()}
       </Text>
-    </TouchableOpacity>
+
+      {item.status === 'accepted' && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.viewMapBtn}
+            onPress={() => {
+              router.push({
+                pathname: '/customer/send-request',
+                params: { requestId: item.id },
+              });
+            }}
+          >
+            <Text style={styles.actionBtnText}>View on Map</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={() => handleCancelRequest(item.id)}
+          >
+            <Text style={styles.actionBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
   );
 
   if (loading && !refreshing) {
@@ -428,5 +483,60 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  mechanicCard: {
+    backgroundColor: '#F0F8FF',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  mechanicLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  mechanicName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  mechanicPhone: {
+    fontSize: 13,
+    color: '#555',
+    marginTop: 4,
+  },
+  acceptedTime: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    gap: 8,
+  },
+  viewMapBtn: {
+    flex: 1,
+    backgroundColor: '#1E90FF',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: '#F44336',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  actionBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

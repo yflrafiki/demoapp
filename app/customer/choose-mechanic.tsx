@@ -94,7 +94,7 @@ export default function ChooseMechanic() {
       // Get all mechanics
       const resp = await supabase
         .from("mechanics")
-        .select("id,name,lat,lng,is_available,specialization,rating,created_at")
+        .select("id,name,phone,lat,lng,is_available,specialization,rating,created_at")
         .order("created_at", { ascending: false });
 
       // Diagnostic logging: show full response so we can see errors/policies
