@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -13,16 +13,24 @@ import {
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect, router } from "expo-router";
-import { acceptRequest, declineRequest, updateRequestLocation } from "../../lib/requests";
+import {
+  acceptRequest,
+  declineRequest,
+  updateRequestLocation,
+} from "../../lib/requests";
 import { MechanicRequest } from "../../types/mechanic.types";
 
 export default function MechanicMap() {
   const [mechanic, setMechanic] = useState<any>(null);
   const [requests, setRequests] = useState<MechanicRequest[]>([]);
   const [mechanicLocation, setMechanicLocation] = useState<any>(null);
+  const [mechanicAddress, setMechanicAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState<MechanicRequest | null>(null);
-  const [locationTracking, setLocationTracking] = useState(false);
+  const [selectedRequest, setSelectedRequest] =
+    useState<MechanicRequest | null>(null);
+
+  // Location watcher reference
+  const watcher = useRef<any>(null);
 
   useEffect(() => {
     getCurrentMechanic();
@@ -34,9 +42,7 @@ export default function MechanicMap() {
         loadRequests();
         startLocationTracking();
       }
-      return () => {
-        stopLocationTracking();
-      };
+      return () => stopLocationTracking();
     }, [mechanic?.id])
   );
 
@@ -83,104 +89,102 @@ export default function MechanicMap() {
     }
   };
 
+  // -----------------------------
+  // 🔥 START REAL-TIME TRACKING
+  // -----------------------------
   const startLocationTracking = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Required", "Location permission is needed to show your location");
-        return;
-      }
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Location permission is required to track your movement."
+      );
+      return;
+    }
 
-      setLocationTracking(true);
+    // Prevent duplicate watchers
+    if (watcher.current) return;
 
-      // Get initial location
-      const location = await Location.getCurrentPositionAsync({});
-      setMechanicLocation({
-        lat: location.coords.latitude,
-        lng: location.coords.longitude,
-      });
+    watcher.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Highest,
+        timeInterval: 2000, // every 2 seconds
+        distanceInterval: 1, // every 1 meter
+      },
+      async (loc) => {
+        const coords = {
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+        };
 
-      // Update mechanic location in database
-      if (mechanic?.id) {
-        await supabase
-          .from("mechanics")
-          .update({
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
-          })
-          .eq("id", mechanic.id);
-        // Also update any currently accepted requests with mechanic coords
+        setMechanicLocation(coords);
+
+        // Reverse geocoding
         try {
-          const { data: acceptedRequests } = await supabase
-            .from("requests")
-            .select("id")
-            .eq("mechanic_id", mechanic.id)
-            .eq("status", "accepted");
-          if (acceptedRequests && acceptedRequests.length > 0) {
-            for (const r of acceptedRequests) {
-              await updateRequestLocation(r.id, location.coords.latitude, location.coords.longitude, true);
-            }
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      // Set up location updates every 5 seconds
-      const interval = setInterval(async () => {
-        try {
-          const loc = await Location.getCurrentPositionAsync({});
-          setMechanicLocation({
-            lat: loc.coords.latitude,
-            lng: loc.coords.longitude,
+          const addr = await Location.reverseGeocodeAsync({
+            latitude: coords.lat,
+            longitude: coords.lng,
           });
 
-          if (mechanic?.id) {
-            await supabase
-              .from("mechanics")
-              .update({
-                lat: loc.coords.latitude,
-                lng: loc.coords.longitude,
-              })
-              .eq("id", mechanic.id);
-            // update accepted requests with latest mechanic location
-            try {
-              const { data: acceptedRequests } = await supabase
-                .from("requests")
-                .select("id")
-                .eq("mechanic_id", mechanic.id)
-                .eq("status", "accepted");
-              if (acceptedRequests && acceptedRequests.length > 0) {
-                for (const r of acceptedRequests) {
-                  await updateRequestLocation(r.id, loc.coords.latitude, loc.coords.longitude, true);
-                }
-              }
-            } catch (e) {
-              // ignore
-            }
+          if (addr && addr.length > 0) {
+            const a: any = addr[0];
+            setMechanicAddress(
+              `${a.name || ""} ${a.street || ""}, ${a.city || a.subregion || ""}, ${a.region || ""}`
+            );
           }
-        } catch (err) {
-          console.log("Error updating location:", err);
-        }
-      }, 5000);
+        } catch {}
 
-      return () => clearInterval(interval);
-    } catch (err: any) {
-      Alert.alert("Error", "Failed to start location tracking");
-    }
+        // Update mechanic location in DB
+        if (mechanic?.id) {
+          await supabase
+            .from("mechanics")
+            .update({
+              lat: coords.lat,
+              lng: coords.lng,
+            })
+            .eq("id", mechanic.id);
+
+          // Update all accepted requests
+          try {
+            const { data: acceptedRequests } = await supabase
+              .from("requests")
+              .select("id")
+              .eq("mechanic_id", mechanic.id)
+              .eq("status", "accepted");
+
+            if (acceptedRequests?.length) {
+              for (const r of acceptedRequests) {
+                await updateRequestLocation(
+                  r.id,
+                  coords.lat,
+                  coords.lng,
+                  true
+                );
+              }
+            }
+          } catch {}
+        }
+      }
+    );
   };
 
+  // -----------------------------
+  // 🛑 STOP TRACKING
+  // -----------------------------
   const stopLocationTracking = () => {
-    setLocationTracking(false);
+    if (watcher.current) {
+      watcher.current.remove();
+      watcher.current = null;
+    }
   };
 
   const handleAcceptRequest = async (request: MechanicRequest) => {
     try {
-      if (!mechanic?.id) throw new Error("Mechanic not found");
-
       await acceptRequest(request.id, mechanic.id);
-      // Navigate to in-app navigation screen so mechanic can follow customer
-      router.push({ pathname: "/mechanic/navigation", params: { requestId: request.id } });
+      router.push({
+        pathname: "/mechanic/navigation",
+        params: { requestId: request.id },
+      });
       loadRequests();
       setSelectedRequest(null);
     } catch (err: any) {
@@ -199,18 +203,21 @@ export default function MechanicMap() {
     }
   };
 
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Earth's radius in km
+  const calculateDistance = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLat / 2) ** 2 +
       Math.cos((lat1 * Math.PI) / 180) *
         Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return (R * c).toFixed(1);
+        Math.sin(dLon / 2) ** 2;
+    return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
   };
 
   const openMapNavigation = (request: MechanicRequest) => {
@@ -218,11 +225,14 @@ export default function MechanicMap() {
       Alert.alert("No Location", "Customer location not available");
       return;
     }
-
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`;
-    Linking.openURL(url);
+    Linking.openURL(
+      `https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`
+    );
   };
 
+  // -----------------------------
+  // UI RENDER
+  // -----------------------------
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -232,95 +242,9 @@ export default function MechanicMap() {
     );
   }
 
-  if (selectedRequest) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setSelectedRequest(null)}>
-            <Text style={styles.backButton}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Request Details</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <ScrollView style={styles.detailsContainer}>
-          <View style={styles.detailCard}>
-            <Text style={styles.sectionTitle}>Customer Information</Text>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Name:</Text>
-              <Text style={styles.value}>{selectedRequest.customer_name}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Phone:</Text>
-              <Text style={styles.value}>{selectedRequest.customer_phone}</Text>
-            </View>
-          </View>
-
-          <View style={styles.detailCard}>
-            <Text style={styles.sectionTitle}>Vehicle Information</Text>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Car Type:</Text>
-              <Text style={styles.value}>{selectedRequest.car_type}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.label}>Issue:</Text>
-              <Text style={styles.value}>{selectedRequest.issue || selectedRequest.description}</Text>
-            </View>
-          </View>
-
-          {mechanicLocation && selectedRequest.lat && selectedRequest.lng && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Distance</Text>
-              <Text style={styles.distance}>
-                {calculateDistance(
-                  mechanicLocation.lat,
-                  mechanicLocation.lng,
-                  selectedRequest.lat,
-                  selectedRequest.lng
-                )}{" "}
-                km away
-              </Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.navigationButton}
-            onPress={() => openMapNavigation(selectedRequest)}
-          >
-            <Text style={styles.navigationButtonText}>Open Navigation</Text>
-          </TouchableOpacity>
-
-          <View style={styles.actionButtonsContainer}>
-            {selectedRequest.status === 'pending' ? (
-              <TouchableOpacity
-                style={styles.acceptButton}
-                onPress={() => handleAcceptRequest(selectedRequest)}
-              >
-                <Text style={styles.actionButtonText}>Accept Request</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.acceptButton, { backgroundColor: '#1976D2' }]}
-                onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: selectedRequest.id } })}
-              >
-                <Text style={styles.actionButtonText}>Continue Navigation</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.declineButton}
-              onPress={() => handleDeclineRequest(selectedRequest)}
-            >
-              <Text style={styles.actionButtonText}>Decline Request</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
+      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push("/mechanic/dashboard")}>
           <Text style={styles.backButton}>← Dashboard</Text>
@@ -329,15 +253,15 @@ export default function MechanicMap() {
         <View style={{ width: 40 }} />
       </View>
 
-      {mechanicLocation && (
+      {/* LIVE LOCATION TEXT */}
+      {mechanicAddress && (
         <View style={styles.locationStatus}>
           <View style={styles.statusIndicator} />
-          <Text style={styles.statusText}>
-            Your location: {mechanicLocation.lat.toFixed(4)}, {mechanicLocation.lng.toFixed(4)}
-          </Text>
+          <Text style={styles.statusText}>Your location: {mechanicAddress}</Text>
         </View>
       )}
 
+      {/* REQUEST LIST */}
       <FlatList
         data={requests}
         keyExtractor={(item) => item.id}
@@ -374,21 +298,15 @@ export default function MechanicMap() {
               >
                 <Text style={styles.quickButtonText}>Navigate</Text>
               </TouchableOpacity>
-              {item.status === 'pending' ? (
-                <TouchableOpacity
-                  style={styles.quickButton}
-                  onPress={() => handleAcceptRequest(item)}
-                >
-                  <Text style={styles.quickButtonText}>Accept</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.quickButton, { backgroundColor: '#1976D2' }]}
-                  onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: item.id } })}
-                >
-                  <Text style={styles.quickButtonText}>Continue</Text>
-                </TouchableOpacity>
-              )}
+
+              <TouchableOpacity
+                style={styles.quickButton}
+                onPress={() => handleAcceptRequest(item)}
+              >
+                <Text style={styles.quickButtonText}>
+                  {item.status === "pending" ? "Accept" : "Continue"}
+                </Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.quickButtonDanger}
@@ -399,13 +317,6 @@ export default function MechanicMap() {
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No pending requests</Text>
-            <Text style={styles.emptySubText}>You're all caught up!</Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContent}
       />
     </View>
   );

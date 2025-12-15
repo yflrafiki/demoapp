@@ -5,35 +5,46 @@
     "slug": "testwork",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "icon": "./assets/app_icon.png",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash_icon_svg.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "autofix.com",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/app_icon.png",
         "backgroundColor": "#ffffff"
       },
+      "userInterfaceStyle": "light",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "autofix.com",
+      "versionCode": 3
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/app_icon.png"
     },
     "plugins": [
       "expo-router",
       "expo-maps"
     ],
-    
     "extra": {
-      "mapboxToken": "YOUR_MAPBOX_ACCESS_TOKEN"
+      "supabaseUrl": "https://saqprinsqxznqstptawo.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhcXByaW5zcXh6bnFzdHB0YXdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNzA1NDUsImV4cCI6MjA3OTg0NjU0NX0.0M-EZWNVd6pANIlNzbr7puuEDCWQ_S5l1EohzSTUQ7w",
+      "router": {},
+      "eas": {
+        "projectId": "db1c2af0-4cba-450e-b9a5-eacf9fc2e156"
+      }
     }
   }
 }

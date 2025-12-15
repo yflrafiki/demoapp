@@ -19,7 +19,7 @@ export default function MechanicEditProfile() {
   // editable fields
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [serviceType, setServiceType] = useState("");
+  const [specialization, setSpecialization] = useState("");
 
   const router = useRouter();
 
@@ -48,7 +48,7 @@ export default function MechanicEditProfile() {
     setProfile(data);
     setName(data.name);
     setPhone(data.phone);
-    setServiceType(data.service_type);
+    setSpecialization(data.specialization)
 
     setLoading(false);
   };
@@ -78,7 +78,7 @@ export default function MechanicEditProfile() {
         .update({
           name: (name || "").trim(),
           phone: (phone || "").trim(),
-          service_type: (serviceType || "").trim(),
+          specialization: specialization.trim(),
         })
         .eq("id", profile.id);
 
@@ -135,15 +135,15 @@ export default function MechanicEditProfile() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Service Type</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., General Repair, Tire Service"
-            value={serviceType || ""}
-            onChangeText={setServiceType}
-            editable={!saving}
-          />
-        </View>
+  <Text style={styles.sectionLabel}>Specialization</Text>
+  <TextInput
+    style={styles.input}
+    placeholder="e.g., General Repair, Tire Service"
+    value={specialization || ""}
+    onChangeText={setSpecialization}
+    editable={!saving}
+  />
+</View>
 
         <TouchableOpacity
           style={[styles.button, saving && { opacity: 0.6 }]}

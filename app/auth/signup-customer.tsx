@@ -18,6 +18,7 @@ export default function CustomerSignup() {
   const [carType, setCarType] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSignup = async () => {
     if (loading) return;
@@ -72,6 +73,7 @@ export default function CustomerSignup() {
       <TextInput
         style={styles.input}
         placeholder="Full name"
+        placeholderTextColor="#999"   
         value={name}
         onChangeText={setName}
       />
@@ -79,6 +81,7 @@ export default function CustomerSignup() {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#999"   
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
@@ -87,6 +90,7 @@ export default function CustomerSignup() {
       <TextInput
         style={styles.input}
         placeholder="Phone"
+        placeholderTextColor="#999"   
         keyboardType="phone-pad"
         value={phone}
         onChangeText={setPhone}
@@ -95,17 +99,20 @@ export default function CustomerSignup() {
       <TextInput
         style={styles.input}
         placeholder="Car type"
+        placeholderTextColor="#999"   
         value={carType}
         onChangeText={setCarType}
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { color: "#000" }]}
         placeholder="Password"
+        placeholderTextColor="#999"   
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
+     
 
       <TouchableOpacity
         style={[styles.button, loading && { opacity: 0.7 }]}

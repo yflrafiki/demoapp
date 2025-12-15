@@ -20,6 +20,9 @@ export default function CustomerDashboard() {
   const [requests, setRequests] = useState<MechanicRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<"all" | "pending" | "accepted" | "completed" | "declined">("all");
+
+  const filteredRequests = requests.filter(r => filter === "all" || r.status === filter);
 
   useEffect(() => {
     getCurrentUser();
@@ -29,22 +32,22 @@ export default function CustomerDashboard() {
     useCallback(() => {
       if (user?.id) {
         loadRequests();
-        // Refresh profile when screen is focused so changes from edit-profile reflect immediately
         fetchCustomerProfile();
       }
     }, [user?.id])
   );
 
-  // Subscribe to requests changes so we get real-time notifications when mechanic arrives
   useEffect(() => {
     if (!user?.id) return;
     let channel: any;
+    let profileChannel: any;
+
     (async () => {
       try {
-        // Get customer id first
         const { data: customerData } = await supabase.from("customers").select("id").eq("auth_id", user.id).single();
         if (!customerData) return;
 
+        // Requests updates
         channel = supabase
           .channel(`public:requests:customer:${customerData.id}`)
           .on(
@@ -56,27 +59,15 @@ export default function CustomerDashboard() {
               filter: `customer_id=eq.${customerData.id}`
             },
             (payload) => {
-              // If request status changed to completed, show notification
               if (payload.new?.status === "completed" && payload.old?.status === "accepted") {
                 Alert.alert("Mechanic Arrived ✓", "The mechanic has arrived and completed the service.");
               }
-              // Update requests state directly without full reload
               setRequests(prev => prev.map(r => r.id === (payload.new as MechanicRequest)?.id ? (payload.new as MechanicRequest) : r));
             }
           )
           .subscribe();
-      } catch (e) {
-        console.log("requests realtime subscribe failed", e);
-      }
-    })();
 
-    // also subscribe to customer profile changes so the dashboard updates when profile is edited
-    let profileChannel: any;
-    (async () => {
-      try {
-        const { data: customerData } = await supabase.from("customers").select("id").eq("auth_id", user.id).single();
-        if (!customerData) return;
-
+        // Profile updates
         profileChannel = supabase
           .channel(`public:customers:customer:${customerData.id}`)
           .on(
@@ -92,8 +83,9 @@ export default function CustomerDashboard() {
             }
           )
           .subscribe();
+
       } catch (e) {
-        console.log("customer profile realtime subscribe failed", e);
+        console.log("Realtime subscription failed", e);
       }
     })();
 
@@ -117,9 +109,7 @@ export default function CustomerDashboard() {
             .eq("auth_id", user.id)
             .maybeSingle();
           if (customerRow) setCustomerName(customerRow.name || null);
-        } catch (e) {
-          // ignore profile fetch errors
-        }
+        } catch (e) {}
       }
     } catch (err: any) {
       Alert.alert("Error", "Failed to get user");
@@ -144,7 +134,6 @@ export default function CustomerDashboard() {
     if (!user?.id) return;
     try {
       const data = await getCustomerRequests(user.id);
-      // Enrich requests with mechanic name/phone if accepted
       if (data && data.length > 0) {
         const enriched = await Promise.all(
           data.map(async (req: any) => {
@@ -152,9 +141,7 @@ export default function CustomerDashboard() {
               try {
                 const { data: mech } = await supabase.from('mechanics').select('name, phone').eq('id', req.mechanic_id).single();
                 return { ...req, mechanic_name: mech?.name, mechanic_phone: mech?.phone };
-              } catch (e) {
-                return req;
-              }
+              } catch (e) { return req; }
             }
             return req;
           })
@@ -187,16 +174,11 @@ export default function CustomerDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending":
-        return "#FFA500";
-      case "accepted":
-        return "#4CAF50";
-      case "completed":
-        return "#2196F3";
-      case "declined":
-        return "#F44336";
-      default:
-        return "#666";
+      case "pending": return "#FFA500";
+      case "accepted": return "#4CAF50";
+      case "completed": return "#2196F3";
+      case "declined": return "#F44336";
+      default: return "#666";
     }
   };
 
@@ -223,16 +205,12 @@ export default function CustomerDashboard() {
     <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
         <Text style={styles.carType}>{item.car_type}</Text>
-        <View
-          style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}
-        >
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
         </View>
       </View>
 
-      <Text style={styles.issue} numberOfLines={2}>
-        {item.issue || item.description}
-      </Text>
+      <Text style={styles.issue} numberOfLines={2}>{item.issue || item.description}</Text>
 
       {item.status === "accepted" && item.mechanic_name && (
         <View style={styles.mechanicCard}>
@@ -245,20 +223,13 @@ export default function CustomerDashboard() {
         </View>
       )}
 
-      <Text style={styles.createdAt}>
-        {new Date(item.created_at).toLocaleDateString()}
-      </Text>
+      <Text style={styles.createdAt}>{new Date(item.created_at).toLocaleDateString()}</Text>
 
       {item.status === 'accepted' && (
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.viewMapBtn}
-            onPress={() => {
-              router.push({
-                pathname: '/customer/send-request',
-                params: { requestId: item.id },
-              });
-            }}
+            onPress={() => router.push({ pathname: '/customer/send-request', params: { requestId: item.id } })}
           >
             <Text style={styles.actionBtnText}>View on Map</Text>
           </TouchableOpacity>
@@ -306,237 +277,73 @@ export default function CustomerDashboard() {
         </TouchableOpacity>
       </View>
 
+      {/* Filter Bar */}
+      <View style={styles.filterBar}>
+        {["all", "pending", "accepted", "completed", "declined"].map(status => (
+          <TouchableOpacity
+            key={status}
+            style={[styles.filterBtn, filter === status && styles.filterBtnActive]}
+            onPress={() => setFilter(status as any)}
+          >
+            <Text style={[styles.filterText, filter === status && styles.filterTextActive]}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <FlatList
-        data={requests}
+        data={filteredRequests}
         renderItem={renderRequest}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No requests yet</Text>
-            <Text style={styles.emptySubText}>
-              Tap the button below to request a mechanic
-            </Text>
+            <Text style={styles.emptySubText}>Tap the button below to request a mechanic</Text>
           </View>
         }
         contentContainerStyle={styles.listContent}
       />
-
-      {/* <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push("/customer/choose-mechanic")}
-      >
-        <Text style={styles.fabText}>+ Request Mechanic</Text>
-      </TouchableOpacity> */}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#333",
-  },
-  logoutText: {
-    color: "#FF6B6B",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  requestCard: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#1E90FF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  requestHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  carType: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#333",
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  issue: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  mechanicInfo: {
-    fontSize: 12,
-    color: "#4CAF50",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  createdAt: {
-    fontSize: 12,
-    color: "#999",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 100,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 8,
-  },
-  emptySubText: {
-    fontSize: 14,
-    color: "#999",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    backgroundColor: "#1E90FF",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  fabText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  greeting: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 4,
-  },
-  profileBtn: {
-    backgroundColor: '#EEE',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  profileBtnText: {
-    color: '#333',
-    fontWeight: '600',
-  },
-  topActions: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  requestBtn: {
-    backgroundColor: '#1E90FF',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  requestBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  mechanicCard: {
-    backgroundColor: '#F0F8FF',
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
-  },
-  mechanicLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#666',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  mechanicName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-  },
-  mechanicPhone: {
-    fontSize: 13,
-    color: '#555',
-    marginTop: 4,
-  },
-  acceptedTime: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 8,
-  },
-  viewMapBtn: {
-    flex: 1,
-    backgroundColor: '#1E90FF',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: '#F44336',
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  actionBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: "#f5f5f5" },
+  centerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  header: { paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16, backgroundColor: "#fff", flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  title: { fontSize: 24, fontWeight: "700", color: "#333" },
+  logoutText: { color: "#FF6B6B", fontWeight: "600", fontSize: 14 },
+  listContent: { paddingHorizontal: 16, paddingTop: 16 },
+  requestCard: { backgroundColor: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: "#1E90FF", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  requestHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  carType: { fontSize: 16, fontWeight: "700", color: "#333" },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  statusText: { color: "#fff", fontSize: 12, fontWeight: "600" },
+  issue: { fontSize: 14, color: "#666", marginBottom: 8 },
+  mechanicCard: { backgroundColor: '#F0F8FF', borderRadius: 8, padding: 12, marginVertical: 12, borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
+  mechanicLabel: { fontSize: 11, fontWeight: '600', color: '#666', textTransform: 'uppercase', marginBottom: 4 },
+  mechanicName: { fontSize: 16, fontWeight: '700', color: '#333' },
+  mechanicPhone: { fontSize: 13, color: '#555', marginTop: 4 },
+  acceptedTime: { fontSize: 12, color: '#4CAF50', fontWeight: '600', marginTop: 6 },
+  createdAt: { fontSize: 12, color: "#999" },
+  greeting: { fontSize: 16, color: '#666', marginBottom: 4 },
+  profileBtn: { backgroundColor: '#EEE', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, marginRight: 8 },
+  profileBtnText: { color: '#333', fontWeight: '600' },
+  topActions: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  requestBtn: { backgroundColor: '#1E90FF', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  requestBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  actionRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
+  viewMapBtn: { flex: 1, backgroundColor: '#1E90FF', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  cancelBtn: { flex: 1, backgroundColor: '#F44336', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 100 },
+  emptyText: { fontSize: 18, fontWeight: "600", color: "#666", marginBottom: 8 },
+  emptySubText: { fontSize: 14, color: "#999" },
+  filterBar: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "#f0f0f0" },
+  filterBtnActive: { backgroundColor: "#1E90FF" },
+  filterText: { color: "#333", fontWeight: "600", fontSize: 12 },
+  filterTextActive: { color: "#fff" },
 });

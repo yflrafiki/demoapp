@@ -85,7 +85,7 @@ export default function MechanicProfile() {
           
           <View style={styles.field}>
             <Text style={styles.label}>Service Type</Text>
-            <Text style={styles.value}>{profile?.service_type || 'Not specified'}</Text>
+            <Text style={styles.value}>{profile?.specialization || 'Not specified'}</Text>
           </View>
 
           <View style={styles.field}>

@@ -15,6 +15,7 @@ export default function LoginScreen() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const formatMechanicPhoneToEmail = (input: string) => {
     // remove non-digits
@@ -97,18 +98,21 @@ export default function LoginScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Email or Phone"
+        placeholder="Email"
+        placeholderTextColor="#999"   
         value={emailOrPhone}
         onChangeText={setEmailOrPhone}
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { color: "#000" }]}
         placeholder="Password"
+        placeholderTextColor="#999"   
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
+
 
       <TouchableOpacity
         style={[styles.button, loading && { opacity: 0.7 }]}

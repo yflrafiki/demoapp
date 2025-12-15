@@ -7,15 +7,31 @@ export default function MechanicSignup() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [service, setService] = useState("");
-  const [email, setEmail] = useState(""); // optional - recommended to ask for email
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handlePhoneChange = (text: string) => {
+    // Remove all non-numeric characters
+    const cleaned = text.replace(/\D/g, "");
+    // Limit to 10 digits
+    const limited = cleaned.slice(0, 10);
+    setPhone(limited);
+  };
 
   const handleSignup = async () => {
     if (loading) return;
     setLoading(true);
+    
     if (!name || !phone || !service || !password) {
-      Alert.alert("Missing fields");
+      Alert.alert("Missing fields", "Please fill in all required fields");
+      setLoading(false);
+      return;
+    }
+
+    if (phone.length !== 10) {
+      Alert.alert("Invalid phone", "Phone number must be exactly 10 digits");
       setLoading(false);
       return;
     }
@@ -48,19 +64,58 @@ export default function MechanicSignup() {
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Mechanic Signup</Text>
-      <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
-      <TextInput style={styles.input} placeholder="Phone" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-      <TextInput style={styles.input} placeholder="Service" value={service} onChangeText={setService} />
-      <TextInput style={styles.input} placeholder="Email (optional)" value={email} onChangeText={setEmail} keyboardType="email-address" />
-      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
-      <TouchableOpacity style={[styles.button, loading && { opacity: 0.7 }]} onPress={handleSignup} disabled={loading}>
+      <TextInput 
+        style={[styles.input, { color: "#000" }]} 
+        placeholder="Full name" 
+        placeholderTextColor="#999"
+        value={name} 
+        onChangeText={setName} 
+      />
+      <TextInput 
+        style={styles.input} 
+        placeholder="Phone (10 digits)" 
+        placeholderTextColor="#999"
+        keyboardType="phone-pad" 
+        value={phone} 
+        onChangeText={handlePhoneChange}
+        maxLength={10}
+      />
+      <TextInput 
+        style={styles.input} 
+        placeholder="Service" 
+        placeholderTextColor="#999"
+        value={service} 
+        onChangeText={setService} 
+      />
+      <TextInput 
+        style={styles.input} 
+        placeholder="Email (optional)" 
+        placeholderTextColor="#999"
+        value={email} 
+        onChangeText={setEmail} 
+        keyboardType="email-address" 
+      />
+      <TextInput 
+        style={styles.input} 
+        placeholder="Password" 
+        placeholderTextColor="#999"
+        secureTextEntry 
+        value={password} 
+        onChangeText={setPassword} 
+      />
+      
+      <TouchableOpacity 
+        style={[styles.button, loading && { opacity: 0.7 }]} 
+        onPress={handleSignup} 
+        disabled={loading}
+      >
         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Mechanic</Text>}
       </TouchableOpacity>
       <TouchableOpacity onPress={() => router.push("/login")}>
-                          <Text style={styles.link}>
-                            Have an Account? <Text style={styles.linkBold}>Login</Text>
-                          </Text>
-                        </TouchableOpacity>
+        <Text style={styles.link}>
+          Have an Account? <Text style={styles.linkBold}>Login</Text>
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
