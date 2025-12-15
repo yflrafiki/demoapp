@@ -152,8 +152,8 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_key
 
 ### 2. Install & Run
 ```bash
-npm install
-npm start
+yarn install
+npx expo start
 ```
 
 ### 3. Test It
@@ -256,17 +256,9 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md#security) for details.
 3. Get user feedback
 4. Make adjustments
 
-### Medium Term (Month 1)
-1. Add payment system
-2. Implement push notifications
-3. Create admin dashboard
-4. Add ratings system
 
-### Long Term (Quarter 1)
-1. Scale infrastructure
-2. Add more features
-3. Optimize performance
-4. Analytics integration
+
+
 
 ---
 
