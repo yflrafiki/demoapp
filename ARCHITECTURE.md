@@ -8,14 +8,14 @@
 │                  (iOS, Android, Web ready)                   │
 └────────────────────────┬────────────────────────────────────┘
                          │
-         ┌───────────────┼───────────────┐
-         │               │               │
-    ┌────▼────┐    ┌────▼────┐    ┌────▼────┐
-    │Customer │    │Mechanic │    │Admin    │
-    │Screens  │    │Screens  │    │Panel    │
-    └────┬────┘    └────┬────┘    └────┬────┘
-         │               │               │
-         └───────────────┼───────────────┘
+         ┌───────────────┼
+         │               │               
+    ┌────▼────┐    ┌────▼────┐    
+    │Customer │    │Mechanic │    
+    │Screens  │    │Screens  │    
+    └────┬────┘    └────┬────┘    
+         │               │               
+         └───────────────┼
                          │
               ┌──────────▼──────────┐
               │   Expo Router       │
@@ -451,16 +451,9 @@ Phase 1 (Current)
 ├─ Client-side logic
 └─ Mobile-first
 
-Phase 2 (Next)
-├─ API Gateway
-├─ Server-side logic
-└─ Admin dashboard
 
-Phase 3 (Mature)
-├─ Microservices
-├─ Real-time messaging
-└─ Analytics platform
-```
+
+
 
 ---
 
