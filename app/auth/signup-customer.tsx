@@ -36,7 +36,7 @@ export default function CustomerSignup() {
         email,
         password,
         options: {
-          data: { role: "customer" } // optional metadata
+          data: { role: "customer" } 
         }
       });
 
