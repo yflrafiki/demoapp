@@ -10,23 +10,22 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
 } from "react-native";
 import * as Location from "expo-location";
 import LeafletMap from "../components/LeafletMap";
 import { supabase } from "../../lib/supabase";
 import { useLocalSearchParams, router } from "expo-router";
-import { createRequest, updateRequestLocation } from "../../lib/requests";
+import { createRequest } from "../../lib/requests";
 import { MechanicRequest } from "../../types/mechanic.types";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SendRequest() {
   const { requestId, mechanicId } = useLocalSearchParams();
   const [customer, setCustomer] = useState<any>(null);
   const [request, setRequest] = useState<MechanicRequest | null>(null);
   const [customerLocation, setCustomerLocation] = useState<any>(null);
-  const [mechanic, setMechanic] = useState<any>(null);
-  const [mechanicLocation, setMechanicLocation] = useState<any>(null);
-  const [customerPlaceName, setCustomerPlaceName] = useState<string | null>(null);
-  const [mechanicPlaceName, setMechanicPlaceName] = useState<string | null>(null);
+  const [customerAddress, setCustomerAddress] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [carType, setCarType] = useState("");
@@ -47,12 +46,6 @@ export default function SendRequest() {
         (payload: any) => {
           if (!mounted) return;
           setRequest(payload.new);
-          if (payload.new?.mechanic_lat && payload.new?.mechanic_lng) {
-            setMechanicLocation({
-              lat: Number(payload.new.mechanic_lat),
-              lng: Number(payload.new.mechanic_lng),
-            });
-          }
         }
       )
       .subscribe();
@@ -62,42 +55,6 @@ export default function SendRequest() {
       supabase.removeChannel(channel);
     };
   }, [requestId]);
-
-  // Reverse geocode customer location
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (customerLocation?.lat && customerLocation?.lng) {
-        try {
-          const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${customerLocation.lat}&lon=${customerLocation.lng}`;
-          const res = await fetch(url, { headers: { "User-Agent": "demoapp/1.0" } });
-          const json = await res.json();
-          if (active) setCustomerPlaceName(json.display_name || null);
-        } catch (e) {
-          console.log("Customer reverse geocode failed:", e);
-        }
-      }
-    })();
-    return () => { active = false; };
-  }, [customerLocation]);
-
-  // Reverse geocode mechanic location
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (mechanicLocation?.lat && mechanicLocation?.lng) {
-        try {
-          const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${mechanicLocation.lat}&lon=${mechanicLocation.lng}`;
-          const res = await fetch(url, { headers: { "User-Agent": "demoapp/1.0" } });
-          const json = await res.json();
-          if (active) setMechanicPlaceName(json.display_name || null);
-        } catch (e) {
-          console.log("Mechanic reverse geocode failed:", e);
-        }
-      }
-    })();
-    return () => { active = false; };
-  }, [mechanicLocation]);
 
   const loadData = async () => {
     try {
@@ -114,34 +71,37 @@ export default function SendRequest() {
           setRequest(reqData);
           setCarType(reqData.car_type || "");
           setIssue(reqData.description || reqData.issue || "");
-          if (reqData.mechanic_lat && reqData.mechanic_lng) {
-            setMechanicLocation({
-              lat: Number(reqData.mechanic_lat),
-              lng: Number(reqData.mechanic_lng),
-            });
-          }
-          if (reqData.mechanic_id) {
-            const { data: mech } = await supabase.from("mechanics").select("*").eq("id", reqData.mechanic_id).single();
-            if (mech) setMechanic(mech);
-          }
         }
       }
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
-        const last = await Location.getCurrentPositionAsync({});
-        setCustomerLocation({ lat: last.coords.latitude, lng: last.coords.longitude });
-
-        await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Highest, timeInterval: 3000, distanceInterval: 1 },
-          async (loc) => {
-            if (!loc) return;
-            const lat = loc.coords.latitude;
-            const lng = loc.coords.longitude;
-            setCustomerLocation({ lat, lng });
-            if (requestId) await updateRequestLocation(requestId as string, lat, lng, false);
+        const loc = await Location.getCurrentPositionAsync({});
+        setCustomerLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+        
+        // Get human-readable address
+        try {
+          const address = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude
+          });
+          
+          if (address && address.length > 0) {
+            const addr = address[0];
+            const readableAddress = [
+              addr.streetNumber,
+              addr.street,
+              addr.city,
+              addr.region
+            ].filter(Boolean).join(", ");
+            
+            setCustomerAddress(readableAddress || "Address not available");
+          } else {
+            setCustomerAddress("Address not available");
           }
-        );
+        } catch (err) {
+          setCustomerAddress("Address not available");
+        }
       }
     } catch (err: any) {
       Alert.alert("Error", err.message);
@@ -193,11 +153,23 @@ export default function SendRequest() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardView}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-    >
+    <SafeAreaView style={styles.safeArea}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {requestId ? "Update Request" : "New Request"}
+        </Text>
+        <View style={{ width: 24 }} />
+      </View>
+      
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+      >
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent} 
@@ -208,31 +180,23 @@ export default function SendRequest() {
             <Text style={styles.cardTitle}>Your Information</Text>
             <Text style={styles.info}>Name: {customer?.name}</Text>
             <Text style={styles.info}>Phone: {customer?.phone}</Text>
-            {customerLocation && (
+            {customerAddress && (
               <Text style={styles.info}>
-                Your Location: {customerPlaceName || `${customerLocation.lat.toFixed(6)}, ${customerLocation.lng.toFixed(6)}`}
-              </Text>
-            )}
-            {mechanicLocation && (
-              <Text style={styles.info}>
-                Mechanic Location: {mechanicPlaceName || `${mechanicLocation.lat.toFixed(6)}, ${mechanicLocation.lng.toFixed(6)}`}
+                Location: {customerAddress}
               </Text>
             )}
           </View>
 
-          {/* Map */}
           <View style={styles.mapContainer}>
             <LeafletMap
               customer={customerLocation}
-              markers={[
-                ...(customerLocation ? [{ id: "customer", ...customerLocation, title: "You" }] : []),
-                ...(mechanicLocation ? [{ id: "mechanic", ...mechanicLocation, title: mechanic?.name || "Mechanic" }] : []),
-              ]}
-              polylines={
-                customerLocation && mechanicLocation
-                  ? [{ id: "route", coords: [[mechanicLocation.lat, mechanicLocation.lng], [customerLocation.lat, customerLocation.lng]], color: "#FF6B35" }]
-                  : []
-              }
+              markers={customerLocation ? [{
+                id: "customer",
+                lat: customerLocation.lat,
+                lng: customerLocation.lng,
+                title: "Your Location",
+                type: "customer"
+              }] : []}
             />
           </View>
 
@@ -262,21 +226,103 @@ export default function SendRequest() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/customer-dashboard')}
+        >
+          <Ionicons name="home-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/history')}
+        >
+          <Ionicons name="time-outline" size={24} color="#666" />
+          <Text style={styles.navText}>History</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/notifications')}
+        >
+          <Ionicons name="notifications-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Notifications</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/profile')}
+        >
+          <Ionicons name="person-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Profile</Text>
+        </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#fff" },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
   keyboardView: { flex: 1, backgroundColor: "#fff" },
   scrollView: { flex: 1, backgroundColor: "#fff" },
   scrollContent: { flexGrow: 1, backgroundColor: "#fff" },
   container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
-  content: { padding: 16, backgroundColor: "#fff" },
-  card: { backgroundColor: "#f5f5f5", borderRadius: 12, padding: 16, marginBottom: 24 },
-  cardTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12 },
-  info: { fontSize: 14, color: "#333", marginBottom: 8 },
-  mapContainer: { height: 400, marginBottom: 16, backgroundColor: "#fff" },
+  content: { padding: 16, backgroundColor: "#F8FAFC", paddingBottom: 100 },
+  card: { 
+    backgroundColor: "#fff", 
+    borderRadius: 12, 
+    padding: 20, 
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardTitle: { 
+    fontSize: 18, 
+    fontWeight: "700", 
+    marginBottom: 16, 
+    color: '#333',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    paddingBottom: 8,
+  },
+  info: { 
+    fontSize: 15, 
+    color: "#333", 
+    marginBottom: 12,
+    paddingLeft: 8,
+    lineHeight: 22,
+  },
+  mapContainer: { height: 300, marginBottom: 16, backgroundColor: "#fff", borderRadius: 8, overflow: "hidden" },
+
   label: { fontSize: 16, fontWeight: "600", marginBottom: 8, color: "#000" },
   input: { 
     borderWidth: 1, 
@@ -293,4 +339,24 @@ const styles = StyleSheet.create({
   button: { backgroundColor: "#1E90FF", paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 8 },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
+  },
+  navItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  navText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
+  },
 });

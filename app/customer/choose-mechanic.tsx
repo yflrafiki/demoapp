@@ -8,12 +8,14 @@ import {
   Alert,
   FlatList,
   ScrollView,
+  Image,
 } from "react-native";
 import * as Location from "expo-location";
+import LeafletMap from "../components/LeafletMap";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect, router } from "expo-router";
 import { Mechanic } from "../../types/mechanic.types";
-import LeafletMap from "../components/LeafletMap";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ChooseMechanic() {
   const [customer, setCustomer] = useState<any>(null);
@@ -81,20 +83,16 @@ export default function ChooseMechanic() {
 
       setCustomer(customerData);
 
-      // Get current location
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
         const loc = await Location.getCurrentPositionAsync({});
-        setCustomerLocation({
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-        });
+        setCustomerLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
       }
 
       // Get all mechanics
       const resp = await supabase
         .from("mechanics")
-        .select("id,name,phone,lat,lng,is_available,specialization,rating,created_at")
+        .select("id,name,phone,lat,lng,is_available,specialization,rating,created_at,profile_image")
         .order("created_at", { ascending: false });
 
       // Diagnostic logging: show full response so we can see errors/policies
@@ -114,34 +112,9 @@ export default function ChooseMechanic() {
     }
   };
 
-  const requestLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Location required", "Please enable location in app settings to see nearby mechanics.");
-        return;
-      }
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setCustomerLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-    } catch (e: any) {
-      Alert.alert("Location error", e.message || String(e));
-    }
-  };
 
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return (R * c).toFixed(1);
-  };
+
 
   const handleSelectMechanic = (mechanic: Mechanic) => {
     setSelectedMechanic(mechanic);
@@ -159,25 +132,7 @@ export default function ChooseMechanic() {
     });
   };
 
-  const markers = mechanics
-    .filter((m) => m.lat !== null && m.lat !== undefined && m.lng !== null && m.lng !== undefined)
-    .map((m) => ({
-      id: m.id,
-      lat: typeof m.lat === "string" ? parseFloat(m.lat) : (m.lat as number),
-      lng: typeof m.lng === "string" ? parseFloat(m.lng) : (m.lng as number),
-      title: m.name,
-      subtitle: m.specialization,
-    }));
 
-  // Debug: log markers and expose a quick refresh
-  useEffect(() => {
-    console.log("choose-mechanic: mechanics count=", mechanics.length, "markers=", markers);
-  }, [mechanics, markers]);
-
-  const handleMarkerPress = (id: string | number) => {
-    const mech = mechanics.find((m) => String(m.id) === String(id));
-    if (mech) setSelectedMechanic(mech);
-  };
 
   if (loading) {
     return (
@@ -225,20 +180,7 @@ export default function ChooseMechanic() {
             </View>
           )}
 
-          {customerLocation && selectedMechanic.lat && selectedMechanic.lng && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Distance</Text>
-              <Text style={styles.distance}>
-                {calculateDistance(
-                  customerLocation.lat,
-                  customerLocation.lng,
-                  selectedMechanic.lat,
-                  selectedMechanic.lng
-                )}{" "}
-                km away
-              </Text>
-            </View>
-          )}
+
 
           <TouchableOpacity
             style={styles.confirmButton}
@@ -261,59 +203,53 @@ export default function ChooseMechanic() {
         <View style={{ width: 40 }} />
       </View>
 
-      { !customerLocation && (
-        <View style={styles.locationBanner}>
-          <Text style={styles.locationBannerText}>Location is disabled. Enable to see distances.</Text>
-          <TouchableOpacity onPress={requestLocation} style={styles.locationButton}>
-            <Text style={styles.locationButtonText}>Allow Location</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Map view showing nearby mechanics */}
       <View style={styles.mapContainer}>
-        <LeafletMap customer={customerLocation} markers={markers} onMarkerPress={handleMarkerPress} />
-
-        {/* Debug badge: shows how many markers we detected and allows quick refresh */}
-        <View style={styles.mapDebugContainer} pointerEvents="box-none">
-          <View style={styles.mapDebugBadge}>
-            <Text style={styles.mapDebugText}>{markers.length} markers</Text>
-          </View>
-          <TouchableOpacity style={styles.mapDebugButton} onPress={loadData}>
-            <Text style={styles.mapDebugButtonText}>Refresh</Text>
-          </TouchableOpacity>
-        </View>
-
-        {markers.length === 0 && (
-          <View style={styles.mapOverlay}>
-            <Text style={styles.mapOverlayText}>No mechanic locations available</Text>
-          </View>
-        )}
+        <LeafletMap
+          customer={customerLocation}
+          markers={[
+            ...(customerLocation ? [{
+              id: "customer",
+              lat: customerLocation.lat,
+              lng: customerLocation.lng,
+              title: "Your Location",
+              type: "customer" as const
+            }] : []),
+            ...mechanics
+              .filter(m => m.lat && m.lng)
+              .map(m => ({
+                id: m.id,
+                lat: Number(m.lat),
+                lng: Number(m.lng),
+                title: m.name,
+                type: "mechanic" as const
+              }))
+          ]}
+        />
       </View>
 
       <FlatList
         data={mechanics}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
-          const distance =
-            customerLocation && item.lat && item.lng
-              ? calculateDistance(
-                  customerLocation.lat,
-                  customerLocation.lng,
-                  item.lat,
-                  item.lng
-                )
-              : null;
-
           return (
             <TouchableOpacity
               style={styles.mechanicCard}
               onPress={() => handleSelectMechanic(item)}
+              activeOpacity={0.7}
             >
               <View style={styles.mechanicHeader}>
                 <View style={styles.mechanicInfo}>
-                  <Text style={styles.mechanicName}>{item.name}</Text>
-                  <Text style={styles.specialization}>{item.specialization}</Text>
+                  <View style={styles.mechanicAvatar}>
+                    {item.profile_image ? (
+                      <Image source={{ uri: item.profile_image }} style={styles.profileImage} />
+                    ) : (
+                      <Ionicons name="person" size={24} color="#1E90FF" />
+                    )}
+                  </View>
+                  <View style={styles.mechanicNameContainer}>
+                    <Text style={styles.mechanicName}>{item.name}</Text>
+                    <Text style={styles.specialization}>{item.specialization}</Text>
+                  </View>
                 </View>
                 {item.rating && (
                   <Text style={styles.rating}>⭐ {item.rating.toFixed(1)}</Text>
@@ -321,19 +257,21 @@ export default function ChooseMechanic() {
               </View>
 
               <View style={styles.mechanicDetails}>
-                <Text style={styles.phone}>📞 {item.phone}</Text>
-                {distance && (
-                  <Text style={styles.distanceText}>{distance} km away</Text>
-                )}
+                <View style={styles.detailsLeft}>
+                  <Text style={styles.phone}>📞 {item.phone}</Text>
+                </View>
                 <View
                   style={[
                     styles.availabilityBadge,
-                    { backgroundColor: item.is_available ? "#4CAF50" : "#999" },
+                    { backgroundColor: item.is_available ? "#4CAF50" : "#FF5722" },
                   ]}
                 >
-                  <Text style={styles.availabilityText}>
-                    {item.is_available ? "Available" : "Unavailable"}
-                  </Text>
+                  <View style={styles.availabilityContent}>
+                    <View style={[styles.statusDot, { backgroundColor: item.is_available ? "#fff" : "#fff" }]} />
+                    <Text style={styles.availabilityText}>
+                      {item.is_available ? "Available" : "Busy"}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </TouchableOpacity>
@@ -349,6 +287,41 @@ export default function ChooseMechanic() {
         }
         contentContainerStyle={styles.listContent}
       />
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/customer-dashboard')}
+        >
+          <Ionicons name="home-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Home</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/history')}
+        >
+          <Ionicons name="time-outline" size={24} color="#666" />
+          <Text style={styles.navText}>History</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/notifications')}
+        >
+          <Ionicons name="notifications-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Notifications</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => router.push('/customer/profile')}
+        >
+          <Ionicons name="person-outline" size={24} color="#666" />
+          <Text style={styles.navText}>Profile</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -393,69 +366,115 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 16,
+    paddingBottom: 100,
   },
   mechanicCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#1E90FF",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   mechanicHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
+    alignItems: "center",
+    marginBottom: 16,
   },
   mechanicInfo: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  mechanicAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#E3F2FD",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    resizeMode: 'cover',
+    backgroundColor: '#f0f0f0',
+  },
+  mechanicNameContainer: {
+    flex: 1,
   },
   mechanicName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#333",
+    color: "#1a1a1a",
     marginBottom: 4,
   },
   specialization: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#666",
     fontWeight: "500",
   },
   rating: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
     color: "#FF9800",
+    backgroundColor: "#FFF8E1",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   mechanicDetails: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  detailsLeft: {
+    flex: 1,
     gap: 8,
   },
   phone: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#1E90FF",
     fontWeight: "600",
+    backgroundColor: "#E3F2FD",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  distanceText: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "600",
-  },
+
   availabilityBadge: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: 6,
+    borderRadius: 20,
     alignSelf: "flex-start",
   },
   availabilityText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  availabilityContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   emptyContainer: {
     alignItems: "center",
@@ -510,11 +529,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FF9800",
   },
-  distance: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1E90FF",
-  },
+
   confirmButton: {
     backgroundColor: "#4CAF50",
     paddingVertical: 14,
@@ -527,81 +542,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-  locationBanner: {
-    backgroundColor: "#fff3e0",
-    padding: 12,
-    margin: 12,
-    borderRadius: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE',
   },
-  locationBannerText: {
-    color: "#8a6d3b",
+  navItem: {
+    alignItems: 'center',
     flex: 1,
-    marginRight: 12,
   },
-  locationButton: {
-    backgroundColor: "#1E90FF",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  locationButtonText: {
-    color: "#fff",
-    fontWeight: "700",
+  navText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
   },
   mapContainer: {
-    height: 260,
-    width: "100%",
+    height: 200,
+    margin: 16,
     backgroundColor: "#fff",
-  },
-  mapOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    pointerEvents: "none",
-  },
-  mapOverlayText: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     borderRadius: 8,
-    color: "#666",
-  },
-  mapDebugContainer: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    zIndex: 20,
-  },
-  mapDebugBadge: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  mapDebugText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  mapDebugButton: {
-    backgroundColor: "#1E90FF",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  mapDebugButtonText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
+    overflow: "hidden",
   },
 });

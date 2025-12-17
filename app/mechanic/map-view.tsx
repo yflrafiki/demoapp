@@ -9,6 +9,7 @@ import {
   Linking,
   FlatList,
   ScrollView,
+  SafeAreaView,
 } from "react-native";
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
@@ -243,7 +244,8 @@ export default function MechanicMap() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push("/mechanic/dashboard")}>
@@ -318,11 +320,16 @@ export default function MechanicMap() {
           </TouchableOpacity>
         )}
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
@@ -339,15 +346,19 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   header: {
-    paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingVertical: 16,
     backgroundColor: "#fff",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   backButton: {
     color: "#FF6B35",

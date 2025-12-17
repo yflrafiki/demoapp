@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
 import { databases, DB_ID } from "../../constants/Appwrite";
 import { Query } from "react-native-appwrite";
+import { router } from "expo-router";
 
 const REQUESTS_COLLECTION = "requests";
 const MECHANIC_COLLECTION = "mechanic";
@@ -72,7 +73,13 @@ export default function MechanicRequests({ route }: any) {
               <Text>{item.carType} • {item.issue}</Text>
               <Text>Price: GH₵{item.price ?? "—"}</Text>
 
-              <View style={{ flexDirection: "row", marginTop: 8 }}>
+              <View style={{ flexDirection: "row", marginTop: 8, gap: 8 }}>
+                <TouchableOpacity 
+                  style={styles.detailsBtn} 
+                  onPress={() => router.push({ pathname: '/mechanic/request-details', params: { requestId: item.$id } })}
+                >
+                  <Text style={styles.detailsText}>View Details</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.completeBtn} onPress={() => markCompleted(item)}>
                   <Text style={styles.completeText}>Mark Completed</Text>
                 </TouchableOpacity>
@@ -91,12 +98,16 @@ export default function MechanicRequests({ route }: any) {
           data={history}
           keyExtractor={(i) => i.$id}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity 
+              style={styles.card}
+              onPress={() => router.push({ pathname: '/mechanic/request-details', params: { requestId: item.$id } })}
+            >
               <Text style={styles.cardTitle}>{item.customerName}</Text>
               <Text>{item.carType} • {item.issue}</Text>
               <Text>Price: GH₵{item.price ?? "—"}</Text>
               <Text style={{ color: "#666", marginTop: 8 }}>{new Date(item.$createdAt).toLocaleString()}</Text>
-            </View>
+              <Text style={styles.viewDetailsHint}>Tap to view details</Text>
+            </TouchableOpacity>
           )}
         />
       )}
@@ -111,6 +122,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "700" },
   completeBtn: { backgroundColor: "green", padding: 10, borderRadius: 8 },
   completeText: { color: "#fff", fontWeight: "700" },
+  detailsBtn: { backgroundColor: "#FF6B35", padding: 10, borderRadius: 8, flex: 1 },
+  detailsText: { color: "#fff", fontWeight: "700", textAlign: "center" },
+  viewDetailsHint: { color: "#FF6B35", fontSize: 12, marginTop: 4, fontStyle: "italic" },
   empty: { color: "#999", textAlign: "center", marginVertical: 12 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
 });

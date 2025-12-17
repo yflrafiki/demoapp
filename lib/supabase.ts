@@ -16,3 +16,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storage: AsyncStorage,     // IMPORTANT: Use AsyncStorage for session persistence
   },
 });
+
+// Helper function to handle auth errors
+export const handleAuthError = async (error: any) => {
+  if (error?.message?.includes('refresh') || error?.message?.includes('token') || error?.message?.includes('Invalid')) {
+    await supabase.auth.signOut();
+    return true; // Indicates auth error that requires re-login
+  }
+  return false;
+};

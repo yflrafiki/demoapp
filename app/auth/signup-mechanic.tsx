@@ -10,7 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from "react-native";
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from "../../lib/supabase";
 import { router } from "expo-router";
 
@@ -22,11 +24,49 @@ export default function MechanicSignup() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const handlePhoneChange = (text: string) => {
     const cleaned = text.replace(/\D/g, "");
     const limited = cleaned.slice(0, 10);
     setPhone(limited);
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions to upload a profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImage = async (uri: string, userId: string) => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const fileName = `${userId}-${Date.now()}.jpg`;
+    
+    const { data, error } = await supabase.storage
+      .from('profile-pictures')
+      .upload(fileName, blob);
+    
+    if (error) throw error;
+    
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile-pictures')
+      .getPublicUrl(fileName);
+    
+    return publicUrl;
   };
 
   const handleSignup = async () => {
@@ -51,6 +91,15 @@ export default function MechanicSignup() {
       if (error) throw error;
       const authId = data.user?.id;
 
+      let profilePictureUrl = null;
+      if (profileImage && authId) {
+        try {
+          profilePictureUrl = await uploadImage(profileImage, authId);
+        } catch (uploadError) {
+          console.log('Image upload failed:', uploadError);
+        }
+      }
+
       await supabase.from("mechanics").insert({
         auth_id: authId,
         name,
@@ -58,7 +107,8 @@ export default function MechanicSignup() {
         specialization: service,
         is_available: true,
         lat: null,
-        lng: null
+        lng: null,
+        profile_image: profilePictureUrl
       });
 
       router.replace("/mechanic/dashboard");
@@ -91,6 +141,20 @@ export default function MechanicSignup() {
 
           {/* Form Section */}
           <View style={styles.formSection}>
+            {/* Profile Picture */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Profile Picture</Text>
+              <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.profileImage} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Text style={styles.imagePlaceholderIcon}>📷</Text>
+                    <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
             {/* Full Name Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Full Name</Text>
@@ -395,5 +459,36 @@ const styles = StyleSheet.create({
   loginTextBold: {
     color: "#FF6B35",
     fontWeight: "700",
+  },
+  imagePickerContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#FF6B35',
+  },
+  imagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+  },
+  imagePlaceholderIcon: {
+    fontSize: 30,
+    marginBottom: 4,
+  },
+  imagePlaceholderText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
   },
 });

@@ -144,6 +144,13 @@ export default function MechanicInbox() {
           <Text style={styles.buttonText}>Decline</Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.detailsButton}
+        onPress={() => router.push({ pathname: '/mechanic/request-details', params: { requestId: item.id } })}
+      >
+        <Text style={styles.detailsButtonText}>View Details</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -299,5 +306,17 @@ const styles = StyleSheet.create({
   emptySubText: {
     fontSize: 14,
     color: "#999",
+  },
+  detailsButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  detailsButtonText: {
+    color: "#FF6B35",
+    fontWeight: "600",
+    fontSize: 14,
   },
 });

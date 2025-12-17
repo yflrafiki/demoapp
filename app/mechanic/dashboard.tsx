@@ -8,19 +8,41 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
-  Alert
+  Alert,
+  ScrollView,
+  SafeAreaView,
+  Platform
 } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { useRouter, useFocusEffect } from "expo-router";
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 
 export default function MechanicDashboard() {
+  const insets = useSafeAreaInsets();
   const [mechanic, setMechanic] = useState<any>(null);
   const [requests, setRequests] = useState<any[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
+  const [activeRequests, setActiveRequests] = useState<any[]>([]);
+  const [completedRequests, setCompletedRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState({ pending: 0, accepted: 0, completed: 0 });
   const router = useRouter();
+
+  // Update stats and organize requests when requests change
+  useEffect(() => {
+    const pending = requests.filter(r => r.status === 'pending');
+    const accepted = requests.filter(r => r.status === 'accepted');
+    const completed = requests.filter(r => r.status === 'completed');
+    
+    setIncomingRequests(pending);
+    setActiveRequests(accepted);
+    setCompletedRequests(completed);
+    setStats({ pending: pending.length, accepted: accepted.length, completed: completed.length });
+  }, [requests]);
 
   const loadProfileAndRequests = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,10 +75,11 @@ export default function MechanicDashboard() {
         lat, 
         lng, 
         status, 
-        created_at
+        created_at,
+        mechanic_id
       `)
       .eq("mechanic_id", me.id)
-      .in("status", ["pending", "accepted"])
+      .in("status", ["pending", "accepted", "completed"])
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -104,7 +127,8 @@ export default function MechanicDashboard() {
         startPublish();
         locInterval = setInterval(startPublish, 10000);
 
-        channel = supabase
+        // Listen for requests assigned to this mechanic
+        const mechanicChannel = supabase
           .channel(`public:requests:mechanic:${me.id}`)
           .on(
             "postgres_changes",
@@ -121,17 +145,27 @@ export default function MechanicDashboard() {
                 Alert.alert('Request Cancelled', `${payload.new?.customer_name || 'Customer'} cancelled the request.`);
               }
 
-              if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                const newReq = payload.new;
+              if (payload.eventType === 'UPDATE') {
+                const updatedReq = payload.new;
+                const oldReq = payload.old;
+                
+                // Check if customer updated request details
+                if (updatedReq.updated_at !== oldReq.updated_at && 
+                    (updatedReq.car_type !== oldReq.car_type || updatedReq.description !== oldReq.description)) {
+                  Alert.alert(
+                    '📝 Request Updated',
+                    `${updatedReq.customer_name || 'Customer'} has updated their request details.`
+                  );
+                }
+                
                 setRequests(prev => {
-                  const idx = prev.findIndex(r => r.id === newReq.id);
+                  const idx = prev.findIndex(r => r.id === updatedReq.id);
                   if (idx >= 0) {
                     const updated = [...prev];
-                    updated[idx] = { ...prev[idx], ...newReq };
+                    updated[idx] = { ...prev[idx], ...updatedReq };
                     return updated;
-                  } else {
-                    return [newReq, ...prev];
                   }
+                  return prev;
                 });
               } else if (payload.eventType === 'DELETE') {
                 setRequests(prev => prev.filter(r => r.id !== payload.old?.id));
@@ -139,6 +173,42 @@ export default function MechanicDashboard() {
             }
           )
           .subscribe();
+
+        // Listen for all new requests
+        const newRequestsChannel = supabase
+          .channel(`public:requests:all`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "requests"
+            },
+            async (payload: any) => {
+              if (!mounted) return;
+              
+              const newReq = payload.new;
+              console.log('New request received:', newReq);
+              
+              // Show notification for all new requests to available mechanics
+              if (newReq?.status === 'pending') {
+                Alert.alert(
+                  '🚗 New Service Request!', 
+                  `${newReq.customer_name || 'A customer'} needs help with their ${newReq.car_type || 'vehicle'}.`,
+                  [
+                    { text: 'View', onPress: () => loadProfileAndRequests() },
+                    { text: 'Later', style: 'cancel' }
+                  ]
+                );
+                
+                // Refresh the requests list
+                loadProfileAndRequests();
+              }
+            }
+          )
+          .subscribe();
+
+        channel = { mechanicChannel, newRequestsChannel };
       } catch (e) {
         console.log("Realtime setup failed:", e);
       }
@@ -146,7 +216,8 @@ export default function MechanicDashboard() {
 
     return () => {
       mounted = false;
-      if (channel) supabase.removeChannel(channel);
+      if (channel?.mechanicChannel) supabase.removeChannel(channel.mechanicChannel);
+      if (channel?.newRequestsChannel) supabase.removeChannel(channel.newRequestsChannel);
       if (locInterval) clearInterval(locInterval);
     };
   }, []);
@@ -163,6 +234,13 @@ export default function MechanicDashboard() {
       const requests = await import("../../lib/requests");
       setLoading(true);
       await requests.acceptRequest(item.id, mechanic.id);
+      
+      // Send notification to customer
+      Alert.alert(
+        'Request Accepted ✓',
+        `You have accepted ${item.customer_name}'s request. Customer will be notified.`
+      );
+      
       router.push({ pathname: "/mechanic/navigation", params: { requestId: item.id } });
       loadProfileAndRequests();
     } catch (e) {
@@ -171,8 +249,34 @@ export default function MechanicDashboard() {
   };
 
   const rejectRequest = async (item: any) => {
-    await supabase.from("requests").update({ status: "rejected" }).eq("id", item.id);
-    loadProfileAndRequests();
+    try {
+      await supabase.from("requests").update({ status: "rejected" }).eq("id", item.id);
+      
+      // Send notification to customer
+      Alert.alert(
+        'Request Declined',
+        `You have declined ${item.customer_name}'s request. Customer will be notified.`
+      );
+      
+      loadProfileAndRequests();
+    } catch (e) {
+      console.warn("rejectRequest failed:", e);
+    }
+  };
+
+  const completeRequest = async (item: any) => {
+    try {
+      await supabase.from("requests").update({ status: "completed" }).eq("id", item.id);
+      
+      Alert.alert(
+        'Service Completed ✓',
+        `You have marked ${item.customer_name}'s request as completed. Customer will be notified.`
+      );
+      
+      loadProfileAndRequests();
+    } catch (e) {
+      console.warn("completeRequest failed:", e);
+    }
   };
 
   if (loading)
@@ -203,8 +307,20 @@ export default function MechanicDashboard() {
 
           {selectedRequest.lat && selectedRequest.lng && (
             <View style={{ marginBottom: 16 }}>
-              <Text style={styles.detailLabel}>LOCATION</Text>
-              <Text style={styles.detailValue}>{selectedRequest.lat}, {selectedRequest.lng}</Text>
+              <Text style={styles.detailLabel}>CUSTOMER LOCATION</Text>
+              <View style={styles.locationContainer}>
+                <Ionicons name="location" size={18} color="#EF4444" />
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationAddress}>GPS Coordinates</Text>
+                  <Text style={styles.locationCoords}>
+                    Lat: {parseFloat(selectedRequest.lat).toFixed(4)}°
+                  </Text>
+                  <Text style={styles.locationCoords}>
+                    Lng: {parseFloat(selectedRequest.lng).toFixed(4)}°
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.locationSubtext}>📍 Use "View on Map" button for navigation</Text>
             </View>
           )}
 
@@ -213,14 +329,21 @@ export default function MechanicDashboard() {
               <TouchableOpacity style={styles.acceptBtn} onPress={() => { acceptRequest(selectedRequest); setSelectedRequest(null); }}>
                 <Text style={styles.btnText}>Accept Request</Text>
               </TouchableOpacity>
+            ) : selectedRequest.status === 'accepted' ? (
+              <TouchableOpacity style={styles.completeBtn} onPress={() => { completeRequest(selectedRequest); setSelectedRequest(null); }}>
+                <Text style={styles.btnText}>Mark Complete</Text>
+              </TouchableOpacity>
             ) : (
               <TouchableOpacity style={[styles.acceptBtn, { backgroundColor: '#1976D2' }]} onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: selectedRequest.id } })}>
                 <Text style={styles.btnText}>Continue Navigation</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.rejectBtn} onPress={() => { rejectRequest(selectedRequest); setSelectedRequest(null); }}>
-              <Text style={styles.btnText}>Decline</Text>
-            </TouchableOpacity>
+            
+            {selectedRequest.status === 'pending' && (
+              <TouchableOpacity style={styles.rejectBtn} onPress={() => { rejectRequest(selectedRequest); setSelectedRequest(null); }}>
+                <Text style={styles.btnText}>Decline</Text>
+              </TouchableOpacity>
+            )}
 
             {selectedRequest.lat && selectedRequest.lng && (
               <TouchableOpacity style={styles.mapBtn} onPress={() => Linking.openURL(`https://www.google.com/maps?q=${selectedRequest.lat},${selectedRequest.lng}`)}>
@@ -234,86 +357,732 @@ export default function MechanicDashboard() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.welcome}>Welcome,</Text>
-      <Text style={styles.name}>{mechanic.name}</Text>
-
-      <TouchableOpacity style={styles.profileCard} onPress={() => router.push("/mechanic/profile")}>
-        <Text style={styles.profileTitle}>Profile & Settings</Text>
-        <Text style={styles.profileSubtitle}>Edit details or log out</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.mapCard} onPress={() => router.push("/mechanic/map-view")}>
-        <Text style={styles.mapTitle}>Open Map & Live Requests</Text>
-        <Text style={styles.mapSubtitle}>View customer location & accept requests</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.section}>Incoming Requests</Text>
-
-      <FlatList
-        data={requests}
-        keyExtractor={(i) => i.id.toString()}
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={styles.empty}>No pending requests</Text>}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => setSelectedRequest(item)}>
-            <Text style={styles.cardTitle}>{item.customer_name}</Text>
-            <Text style={styles.cardPhone}>📞 {item.customer_phone}</Text>
-            <Text style={styles.cardMeta}>{item.car_type} • {item.description}</Text>
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.userInfo}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {mechanic?.name ? mechanic.name.charAt(0).toUpperCase() : "M"}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.greeting}>Welcome back, {mechanic?.name || 'Mechanic'} 👋</Text>
+              <Text style={styles.subtitle}>Ready to help customers today</Text>
+            </View>
+          </View>
+          
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusBadge, { backgroundColor: mechanic?.is_available ? '#4CAF50' : '#FF5722' }]}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>
+                {mechanic?.is_available ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+          </View>
+        </View>
 
-            <View style={styles.row}>
-              <TouchableOpacity style={styles.mapBtn} onPress={() => Linking.openURL(`https://www.google.com/maps?q=${item.lat},${item.lng}`)}>
-                <Text style={styles.btnText}>Map</Text>
-              </TouchableOpacity>
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Ionicons name="hourglass-outline" size={24} color="#FF9800" />
+            <Text style={styles.statNumber}>{stats.pending}</Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Ionicons name="checkmark-circle-outline" size={24} color="#4CAF50" />
+            <Text style={styles.statNumber}>{stats.accepted}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Ionicons name="trophy-outline" size={24} color="#2196F3" />
+            <Text style={styles.statNumber}>{stats.completed}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+          </View>
+        </View>
 
-              {item.status === 'pending' ? (
-                <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptRequest(item)}>
-                  <Text style={styles.btnText}>Accept</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={[styles.acceptBtn, { backgroundColor: '#1976D2' }]} onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: item.id } })}>
-                  <Text style={styles.btnText}>Continue</Text>
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.actionCard} onPress={() => router.push("/mechanic/map-view")}>
+            <View style={styles.actionIcon}>
+              <Ionicons name="map" size={28} color="#fff" />
+            </View>
+            <Text style={styles.actionTitle}>Live Map</Text>
+            <Text style={styles.actionSubtitle}>View nearby requests</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Incoming Requests */}
+        {incomingRequests.length > 0 && (
+          <View style={styles.requestsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🔔 Incoming Requests</Text>
+              <Text style={styles.countBadge}>{incomingRequests.length}</Text>
+            </View>
+            <FlatList
+              data={incomingRequests.slice(0, 2)}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.requestCard, styles.incomingCard]} onPress={() => setSelectedRequest(item)}>
+                  <View style={styles.requestHeader}>
+                    <View style={styles.customerInfo}>
+                      <View style={styles.customerAvatar}>
+                        <Ionicons name="person" size={20} color="#FF9800" />
+                      </View>
+                      <View>
+                        <Text style={styles.customerName}>{item.customer_name}</Text>
+                        <Text style={styles.carType}>{item.car_type}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.requestStatus, { backgroundColor: '#FF9800' + '20' }]}>
+                      <Text style={[styles.requestStatusText, { color: '#FF9800' }]}>New</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.requestDescription} numberOfLines={2}>
+                    {item.description || 'No description provided'}
+                  </Text>
+                  <View style={styles.requestActions}>
+                    <TouchableOpacity style={[styles.actionBtn, styles.acceptBtn]} onPress={() => acceptRequest(item)}>
+                      <Ionicons name="checkmark" size={16} color="#fff" />
+                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => Linking.openURL(`tel:${item.customer_phone}`)}>
+                      <Ionicons name="call" size={16} color="#4CAF50" />
+                      <Text style={[styles.actionBtnText, { color: '#4CAF50' }]}>Call</Text>
+                    </TouchableOpacity>
+                  </View>
                 </TouchableOpacity>
               )}
+            />
+          </View>
+        )}
 
-              <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectRequest(item)}>
-                <Text style={styles.btnText}>Reject</Text>
+        {/* Active Requests */}
+        {activeRequests.length > 0 && (
+          <View style={styles.requestsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🔧 Active Jobs</Text>
+              <Text style={styles.countBadge}>{activeRequests.length}</Text>
+            </View>
+            <FlatList
+              data={activeRequests.slice(0, 2)}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.requestCard, styles.activeCard]} onPress={() => setSelectedRequest(item)}>
+                  <View style={styles.requestHeader}>
+                    <View style={styles.customerInfo}>
+                      <View style={styles.customerAvatar}>
+                        <Ionicons name="person" size={20} color="#4CAF50" />
+                      </View>
+                      <View>
+                        <Text style={styles.customerName}>{item.customer_name}</Text>
+                        <Text style={styles.carType}>{item.car_type}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.requestStatus, { backgroundColor: '#4CAF50' + '20' }]}>
+                      <Text style={[styles.requestStatusText, { color: '#4CAF50' }]}>Active</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.requestDescription} numberOfLines={2}>
+                    {item.description || 'No description provided'}
+                  </Text>
+                  <View style={styles.requestActions}>
+                    <TouchableOpacity style={[styles.actionBtn, styles.completeBtn]} onPress={() => completeRequest(item)}>
+                      <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                      <Text style={[styles.actionBtnText, { color: '#fff' }]}>Complete</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => router.push({ pathname: '/mechanic/navigation', params: { requestId: item.id } })}>
+                      <Ionicons name="navigate" size={16} color="#2196F3" />
+                      <Text style={[styles.actionBtnText, { color: '#2196F3' }]}>Navigate</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
+        {/* Recent Completed */}
+        {completedRequests.length > 0 && (
+          <View style={styles.requestsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>✅ Recently Completed</Text>
+              <TouchableOpacity onPress={() => router.push('/mechanic/history')}>
+                <Text style={styles.seeAllText}>See All</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+            <FlatList
+              data={completedRequests.slice(0, 2)}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.requestCard, styles.completedCard]} onPress={() => setSelectedRequest(item)}>
+                  <View style={styles.requestHeader}>
+                    <View style={styles.customerInfo}>
+                      <View style={styles.customerAvatar}>
+                        <Ionicons name="person" size={20} color="#2196F3" />
+                      </View>
+                      <View>
+                        <Text style={styles.customerName}>{item.customer_name}</Text>
+                        <Text style={styles.carType}>{item.car_type}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.requestStatus, { backgroundColor: '#2196F3' + '20' }]}>
+                      <Text style={[styles.requestStatusText, { color: '#2196F3' }]}>Completed</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.requestDescription} numberOfLines={2}>
+                    {item.description || 'No description provided'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         )}
-      />
-    </View>
+
+        {/* Empty State */}
+        {requests.length === 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="car-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyTitle}>No requests yet</Text>
+            <Text style={styles.emptySubtitle}>New service requests will appear here</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={styles.navContainer}>
+          <TouchableOpacity style={styles.navItem} activeOpacity={0.7}>
+            <View style={styles.navIconContainer}>
+              <Ionicons name="home" size={22} color="#1E90FF" />
+            </View>
+            <Text style={styles.navTextActive}>Home</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.navItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/mechanic/history')}
+          >
+            <View style={styles.navIconContainer}>
+              <Ionicons name="time-outline" size={22} color="#666" />
+            </View>
+            <Text style={styles.navText}>History</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.navItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/mechanic/notifications')}
+          >
+            <View style={styles.navIconContainer}>
+              <Ionicons name="notifications-outline" size={22} color="#666" />
+            </View>
+            <Text style={styles.navText}>Alerts</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.navItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/mechanic/profile')}
+          >
+            <View style={styles.navIconContainer}>
+              <Ionicons name="person-outline" size={22} color="#666" />
+            </View>
+            <Text style={styles.navText}>Profile</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'pending': return '#FF9800';
+    case 'accepted': return '#4CAF50';
+    case 'completed': return '#2196F3';
+    default: return '#666';
+  }
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#f5f5f5", paddingTop: 40 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  welcome: { fontSize: 20, color: "#555", marginBottom: 4 },
-  name: { fontSize: 28, fontWeight: "700", marginBottom: 16 },
-  profileCard: { backgroundColor: "#1E90FF", padding: 20, borderRadius: 12, marginBottom: 16, elevation: 2 },
-  profileTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  profileSubtitle: { color: "#eee", fontSize: 14, marginTop: 4 },
-  mapCard: { backgroundColor: "#4CAF50", padding: 20, borderRadius: 12, marginBottom: 24, elevation: 2 },
-  mapTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
-  mapSubtitle: { color: "#eee", fontSize: 14, marginTop: 4 },
-  section: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: "#333" },
-  empty: { fontSize: 16, color: "#777", textAlign: "center", marginTop: 12 },
-  card: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  cardPhone: { fontSize: 14, color: "#1E90FF", fontWeight: "600", marginBottom: 6 },
-  cardMeta: { fontSize: 14, color: "#555" },
-  row: { flexDirection: "row", marginTop: 12 },
-  btnText: { color: "#fff", fontWeight: "600", fontSize: 14 },
-  mapBtn: { backgroundColor: "#333", padding: 10, borderRadius: 8, marginRight: 8 },
-  acceptBtn: { backgroundColor: "green", padding: 10, borderRadius: 8, marginRight: 8 },
-  rejectBtn: { backgroundColor: "red", padding: 10, borderRadius: 8 },
-  detailHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#eee", marginBottom: 20 },
-  backBtn: { color: "#1E90FF", fontWeight: "600", fontSize: 14 },
-  detailTitle: { fontSize: 20, fontWeight: "700" },
-  detailCard: { backgroundColor: "#fff", padding: 20, borderRadius: 12, elevation: 2 },
-  detailLabel: { fontSize: 12, fontWeight: "600", color: "#999", textTransform: "uppercase", marginBottom: 4 },
-  detailValue: { fontSize: 16, fontWeight: "500", color: "#333", marginBottom: 12 },
-  detailActions: { marginTop: 16, flexDirection: "column" },
+  safeArea: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: '5%',
+    paddingTop: '5%',
+    paddingBottom: 16,
+    backgroundColor: '#fff',
+    minHeight: 80,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    maxWidth: '70%',
+  },
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: '#FF6B35',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  greeting: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    flexShrink: 1,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+    flexShrink: 1,
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
+    maxWidth: '30%',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    gap: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: '5%',
+    marginTop: 8,
+    gap: '2%',
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    minHeight: 80,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#333',
+    marginTop: 6,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  quickActions: {
+    paddingHorizontal: '5%',
+    marginTop: 16,
+  },
+  actionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    minHeight: 100,
+  },
+  actionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#1E90FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  actionSubtitle: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+  },
+  requestsSection: {
+    marginTop: 16,
+    paddingHorizontal: '5%',
+    paddingBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  seeAllText: {
+    fontSize: 12,
+    color: '#1E90FF',
+    fontWeight: '600',
+  },
+  requestCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  requestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  customerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    maxWidth: '70%',
+  },
+  customerAvatar: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  customerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    flexShrink: 1,
+  },
+  carType: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 1,
+    flexShrink: 1,
+  },
+  requestStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    maxWidth: '30%',
+  },
+  requestStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  requestDescription: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#f5f5f5',
+    gap: 3,
+    minWidth: 60,
+  },
+  actionBtnText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  acceptBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  continueBtn: {
+    backgroundColor: '#2196F3',
+  },
+  countBadge: {
+    backgroundColor: '#1E90FF',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  incomingCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  activeCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  completedCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+    opacity: 0.8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: '5%',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: 12,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backBtn: {
+    color: '#1E90FF',
+    fontWeight: '600',
+    fontSize: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  detailTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  detailCard: {
+    backgroundColor: '#fff',
+    margin: 16,
+    padding: 24,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  detailActions: {
+    marginTop: 8,
+    gap: 12,
+  },
+  bottomNav: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  navContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    minHeight: 50,
+  },
+  navItem: {
+    alignItems: 'center',
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  navIconContainer: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  navText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 4,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  navTextActive: {
+    fontSize: 10,
+    color: '#1E90FF',
+    marginTop: 4,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rejectBtn: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapBtn: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  btnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 8,
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#EF4444',
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationAddress: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  locationCoords: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6B7280',
+    fontFamily: 'monospace',
+    lineHeight: 18,
+  },
+  locationSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  completeBtn: {
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
 });

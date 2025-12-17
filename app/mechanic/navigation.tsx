@@ -169,22 +169,39 @@ export default function MechanicNavigation() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Request Info</Text>
-          <Text style={styles.cardText}><Text style={styles.bold}>Car Type:</Text> {request?.car_type}</Text>
-          <Text style={styles.cardText}><Text style={styles.bold}>Issue:</Text> {request?.description}</Text>
-          <Text style={styles.cardText}><Text style={styles.bold}>Status:</Text> {request?.status?.toUpperCase()}</Text>
+          <Text style={styles.cardTitle}>🚗 Request Details</Text>
+          <Text style={styles.cardText}><Text style={styles.bold}>Vehicle:</Text> {request?.car_type || 'Not specified'}</Text>
+          <Text style={styles.cardText}><Text style={styles.bold}>Issue:</Text> {request?.description || 'No description'}</Text>
+          <Text style={styles.cardText}><Text style={styles.bold}>Status:</Text> {request?.status?.toUpperCase() || 'UNKNOWN'}</Text>
+          <Text style={styles.cardText}><Text style={styles.bold}>Customer:</Text> {request?.customer_name || 'Unknown'}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Locations</Text>
-          {customerPlaceName && <Text style={styles.cardText}><Text style={styles.bold}>Customer:</Text> {customerPlaceName}</Text>}
-          {mechanicPlaceName && <Text style={styles.cardText}><Text style={styles.bold}>Your Location:</Text> {mechanicPlaceName}</Text>}
+          <Text style={styles.cardTitle}>📍 Navigation</Text>
+          {customerPlaceName && (
+            <Text style={styles.cardText}>
+              <Text style={styles.bold}>Destination:</Text> {customerPlaceName.length > 60 ? customerPlaceName.substring(0, 60) + '...' : customerPlaceName}
+            </Text>
+          )}
+          {mechanicPlaceName && (
+            <Text style={styles.cardText}>
+              <Text style={styles.bold}>Your Location:</Text> {mechanicPlaceName.length > 60 ? mechanicPlaceName.substring(0, 60) + '...' : mechanicPlaceName}
+            </Text>
+          )}
+          {mechanicLocation && customerLocation && (
+            <Text style={styles.cardText}>
+              <Text style={styles.bold}>Distance:</Text> {(getDistance(mechanicLocation.lat, mechanicLocation.lng, customerLocation.lat, customerLocation.lng) / 1000).toFixed(1)} km
+            </Text>
+          )}
         </View>
 
         <TouchableOpacity style={styles.completeBtn} onPress={handleComplete}>
-          <Text style={styles.completeText}>Mark Arrived / Complete</Text>
+          <Text style={styles.completeText}>✅ Mark as Complete</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -192,14 +209,73 @@ export default function MechanicNavigation() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  mapWrap: { height: 400, margin: 16, borderRadius: 16, overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.1, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 5 },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 24 },
-  card: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 16, shadowColor: "#000", shadowOpacity: 0.05, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 3 },
-  cardTitle: { fontSize: 16, fontWeight: "700", color: "#333", marginBottom: 8 },
-  cardText: { fontSize: 14, color: "#555", marginBottom: 4 },
-  bold: { fontWeight: "600", color: "#333" },
-  completeBtn: { backgroundColor: "#4CAF50", paddingVertical: 16, borderRadius: 12, alignItems: "center", marginBottom: 16, marginTop: 8 },
-  completeText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F8FAFC" },
+  mapWrap: { 
+    height: '45%', 
+    marginHorizontal: '4%', 
+    marginTop: '4%',
+    marginBottom: '2%',
+    borderRadius: 12, 
+    overflow: "hidden", 
+    shadowColor: "#000", 
+    shadowOpacity: 0.1, 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowRadius: 8, 
+    elevation: 4,
+    minHeight: 250,
+    maxHeight: 400
+  },
+  scrollContent: { 
+    paddingHorizontal: '4%', 
+    paddingBottom: 20,
+    flexGrow: 1
+  },
+  card: { 
+    backgroundColor: "#fff", 
+    padding: 14, 
+    borderRadius: 10, 
+    marginBottom: 12, 
+    shadowColor: "#000", 
+    shadowOpacity: 0.05, 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowRadius: 4, 
+    elevation: 2
+  },
+  cardTitle: { 
+    fontSize: 15, 
+    fontWeight: "700", 
+    color: "#1E90FF", 
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5
+  },
+  cardText: { 
+    fontSize: 13, 
+    color: "#555", 
+    marginBottom: 6,
+    lineHeight: 18
+  },
+  bold: { 
+    fontWeight: "600", 
+    color: "#333"
+  },
+  completeBtn: { 
+    backgroundColor: "#4CAF50", 
+    paddingVertical: 14, 
+    borderRadius: 10, 
+    alignItems: "center", 
+    marginTop: 8,
+    shadowColor: "#4CAF50",
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3
+  },
+  completeText: { 
+    color: "#fff", 
+    fontWeight: "700", 
+    fontSize: 15,
+    letterSpacing: 0.5
+  },
 });
