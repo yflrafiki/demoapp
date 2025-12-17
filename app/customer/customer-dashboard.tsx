@@ -284,7 +284,9 @@ export default function CustomerDashboard() {
           <Ionicons name="car-sport-outline" size={24} color="#1E90FF" />
           <View style={styles.carDetails}>
             <Text style={styles.carType}>{item.car_type}</Text>
-            <Text style={styles.licensePlate}>{item.license_plate || "No plate"}</Text>
+            {item.license_plate && (
+              <Text style={styles.licensePlate}>{item.license_plate}</Text>
+            )}
           </View>
         </View>
         
