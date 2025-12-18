@@ -45,48 +45,62 @@ export default function MechanicDashboard() {
   }, [requests]);
 
   const loadProfileAndRequests = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.replace("/login");
-      return;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('Auth error:', userError);
+        Alert.alert('Authentication Error', 'Please login again.');
+        router.replace("/login");
+        return;
+      }
+      
+      if (!user) {
+        console.log('No user found, redirecting to login');
+        router.replace("/login");
+        return;
+      }
+
+      console.log('User authenticated:', user.id);
+
+      // Get mechanic profile
+      const mechanicResult = await supabase
+        .from("mechanics")
+        .select("id, name, lat, lng, is_available, rating")
+        .eq("auth_id", user.id)
+        .single();
+
+      console.log('Mechanic query result:', mechanicResult);
+
+      if (mechanicResult.error) {
+        console.error('Mechanic query error:', mechanicResult.error);
+        Alert.alert('Profile Error', 'Mechanic profile not found. Please contact support.');
+        return;
+      }
+
+      if (!mechanicResult.data) {
+        console.log('No mechanic profile found');
+        Alert.alert('Profile Missing', 'No mechanic profile found for this account.');
+        return;
+      }
+
+      setMechanic(mechanicResult.data);
+
+      // Get requests
+      const requestsResult = await supabase
+        .from("requests")
+        .select(`id, customer_name, customer_phone, car_type, description, lat, lng, status, created_at, mechanic_id`)
+        .eq("mechanic_id", mechanicResult.data.id)
+        .in("status", ["pending", "accepted", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      setRequests(requestsResult.data || []);
+      console.log('Dashboard loaded successfully');
+    } catch (error) {
+      console.error('Loading error:', error);
+      Alert.alert('Error', 'Failed to load dashboard. Please try again.');
     }
-
-    const { data: me } = await supabase
-      .from("mechanics")
-      .select("id, name, lat, lng, is_available")
-      .eq("auth_id", user.id)
-      .single();
-
-    if (!me) {
-      router.replace("/login");
-      return;
-    }
-
-    setMechanic(me);
-
-    const { data: reqs } = await supabase
-      .from("requests")
-      .select(`
-        id, 
-        customer_name, 
-        customer_phone,
-        car_type, 
-        description, 
-        lat, 
-        lng, 
-        status, 
-        created_at,
-        mechanic_id
-      `)
-      .eq("mechanic_id", me.id)
-      .in("status", ["pending", "accepted", "completed"])
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    setRequests(reqs?.map((r: any) => ({
-      ...r,
-      customer_phone: r.customer_phone || "N/A"
-    })) || []);
   };
 
   useEffect(() => {
@@ -96,137 +110,92 @@ export default function MechanicDashboard() {
       setLoading(false);
     };
     init();
+  }, []);
 
+  // Separate effect for location and realtime setup
+  useEffect(() => {
+    if (!mechanic?.id) return;
+    
     let locInterval: any;
     let channel: any;
     let mounted = true;
 
-    (async () => {
+    const setupLocationAndRealtime = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data: me } = await supabase
-          .from("mechanics")
-          .select("id")
-          .eq("auth_id", user.id)
-          .single();
-        if (!me) return;
-
-        const startPublish = async () => {
+        // Setup location updates
+        try {
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status !== "granted") return;
+          if (status === "granted") {
+            const updateLocation = async () => {
+              try {
+                const loc = await Location.getCurrentPositionAsync({ 
+                  accuracy: Location.Accuracy.Balanced
+                });
+                await supabase
+                  .from("mechanics")
+                  .update({ lat: loc.coords.latitude, lng: loc.coords.longitude, is_available: true })
+                  .eq("id", mechanic.id);
+              } catch (e) {
+                console.log('Location update failed:', e);
+              }
+            };
+            
+            updateLocation();
+            locInterval = setInterval(updateLocation, 30000);
+          }
+        } catch (locationError) {
+          console.log('Location permission error:', locationError);
+        }
 
-          const loc = await Location.getCurrentPositionAsync({});
-          await supabase
-            .from("mechanics")
-            .update({ lat: loc.coords.latitude, lng: loc.coords.longitude, is_available: true })
-            .eq("id", me.id);
-        };
-
-        startPublish();
-        locInterval = setInterval(startPublish, 10000);
-
-        // Listen for requests assigned to this mechanic
+        // Setup realtime subscriptions
         const mechanicChannel = supabase
-          .channel(`public:requests:mechanic:${me.id}`)
+          .channel(`mechanic_${mechanic.id}`)
           .on(
             "postgres_changes",
             {
               event: "*",
               schema: "public",
               table: "requests",
-              filter: `mechanic_id=eq.${me.id}`
+              filter: `mechanic_id=eq.${mechanic.id}`
             },
-            async (payload: any) => {
+            (payload: any) => {
               if (!mounted) return;
-
-              if (payload.new?.status === 'declined' && payload.old?.status !== 'declined') {
-                Alert.alert('Request Cancelled', `${payload.new?.customer_name || 'Customer'} cancelled the request.`);
-              }
-
+              
               if (payload.eventType === 'UPDATE') {
-                const updatedReq = payload.new;
-                const oldReq = payload.old;
-                
-                // Check if customer updated request details
-                if (updatedReq.updated_at !== oldReq.updated_at && 
-                    (updatedReq.car_type !== oldReq.car_type || updatedReq.description !== oldReq.description)) {
-                  Alert.alert(
-                    '📝 Request Updated',
-                    `${updatedReq.customer_name || 'Customer'} has updated their request details.`
-                  );
-                }
-                
                 setRequests(prev => {
-                  const idx = prev.findIndex(r => r.id === updatedReq.id);
+                  const idx = prev.findIndex(r => r.id === payload.new.id);
                   if (idx >= 0) {
                     const updated = [...prev];
-                    updated[idx] = { ...prev[idx], ...updatedReq };
+                    updated[idx] = { ...prev[idx], ...payload.new };
                     return updated;
                   }
                   return prev;
                 });
-              } else if (payload.eventType === 'DELETE') {
-                setRequests(prev => prev.filter(r => r.id !== payload.old?.id));
               }
             }
           )
           .subscribe();
 
-        // Listen for all new requests
-        const newRequestsChannel = supabase
-          .channel(`public:requests:all`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "requests"
-            },
-            async (payload: any) => {
-              if (!mounted) return;
-              
-              const newReq = payload.new;
-              console.log('New request received:', newReq);
-              
-              // Show notification for all new requests to available mechanics
-              if (newReq?.status === 'pending') {
-                Alert.alert(
-                  '🚗 New Service Request!', 
-                  `${newReq.customer_name || 'A customer'} needs help with their ${newReq.car_type || 'vehicle'}.`,
-                  [
-                    { text: 'View', onPress: () => loadProfileAndRequests() },
-                    { text: 'Later', style: 'cancel' }
-                  ]
-                );
-                
-                // Refresh the requests list
-                loadProfileAndRequests();
-              }
-            }
-          )
-          .subscribe();
-
-        channel = { mechanicChannel, newRequestsChannel };
+        channel = mechanicChannel;
       } catch (e) {
-        console.log("Realtime setup failed:", e);
+        console.log("Setup failed:", e);
       }
-    })();
+    };
+
+    setupLocationAndRealtime();
 
     return () => {
       mounted = false;
-      if (channel?.mechanicChannel) supabase.removeChannel(channel.mechanicChannel);
-      if (channel?.newRequestsChannel) supabase.removeChannel(channel.newRequestsChannel);
+      if (channel) supabase.removeChannel(channel);
       if (locInterval) clearInterval(locInterval);
     };
-  }, []);
+  }, [mechanic?.id]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadProfileAndRequests();
     setRefreshing(false);
-  };
+  }, []);
 
   const acceptRequest = async (item: any) => {
     try {
@@ -374,7 +343,12 @@ export default function MechanicDashboard() {
             </View>
             <View>
               <Text style={styles.greeting}>Welcome back, {mechanic?.name || 'Mechanic'} 👋</Text>
-              <Text style={styles.subtitle}>Ready to help customers today</Text>
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={14} color="#FFD700" />
+                <Text style={styles.ratingText}>
+                  {mechanic?.rating ? mechanic.rating.toFixed(1) : '0.0'}
+                </Text>
+              </View>
             </View>
           </View>
           
@@ -622,11 +596,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: '5%',
-    paddingTop: '5%',
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 16,
     backgroundColor: '#fff',
-    minHeight: 80,
+    marginTop: 40,
   },
   userInfo: {
     flexDirection: 'row',
@@ -649,7 +623,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   greeting: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#333',
     flexShrink: 1,
@@ -685,23 +659,22 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: '5%',
-    marginTop: 8,
-    gap: '2%',
+    paddingHorizontal: 20,
+    marginTop: 12,
+    gap: 8,
   },
   statCard: {
     flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
-    minHeight: 80,
   },
   statNumber: {
     fontSize: 20,
@@ -717,8 +690,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   quickActions: {
-    paddingHorizontal: '5%',
-    marginTop: 16,
+    paddingHorizontal: 20,
+    marginTop: 20,
   },
   actionCard: {
     backgroundColor: '#fff',
@@ -754,8 +727,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   requestsSection: {
-    marginTop: 16,
-    paddingHorizontal: '5%',
+    marginTop: 20,
+    paddingHorizontal: 20,
     paddingBottom: 20,
   },
   sectionHeader: {
@@ -890,7 +863,8 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     backgroundColor: '#fff',
     borderRadius: 12,
-    paddingHorizontal: '5%',
+    marginHorizontal: 20,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     fontSize: 16,
@@ -1006,6 +980,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
   center: {
     flex: 1,

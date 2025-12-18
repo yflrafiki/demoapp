@@ -223,22 +223,87 @@ export default function CustomerDashboard() {
   };
 
   const handleCancelRequest = async (requestId: string) => {
-    Alert.alert('Cancel Request', 'Are you sure you want to cancel this request?', [
-      { text: 'No', style: 'cancel' },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await supabase.from('requests').update({ status: 'declined' }).eq('id', requestId);
-            Alert.alert('Cancelled', 'Your request was cancelled.');
-            loadRequests();
-          } catch (e: any) {
-            Alert.alert('Error', e.message || String(e));
+    Alert.alert(
+      'Cancel Request', 
+      'Are you sure you want to cancel this request? This action cannot be undone.', 
+      [
+        { text: 'Keep Request', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await supabase.from('requests').update({ status: 'declined' }).eq('id', requestId);
+              Alert.alert(
+                '✓ Request Cancelled', 
+                'Your request has been cancelled successfully. You can create a new request anytime.',
+                [{ text: 'OK' }]
+              );
+              loadRequests();
+            } catch (e: any) {
+              Alert.alert('Error', 'Failed to cancel request. Please try again.');
+            }
           }
         }
+      ]
+    );
+  };
+
+  const handleRateMechanic = (item: any) => {
+    Alert.alert(
+      'Rate Your Experience',
+      `How was your service with ${item.mechanic_name || 'the mechanic'}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: '⭐ 1 Star', onPress: () => submitRating(item, 1) },
+        { text: '⭐⭐ 2 Stars', onPress: () => submitRating(item, 2) },
+        { text: '⭐⭐⭐ 3 Stars', onPress: () => submitRating(item, 3) },
+        { text: '⭐⭐⭐⭐ 4 Stars', onPress: () => submitRating(item, 4) },
+        { text: '⭐⭐⭐⭐⭐ 5 Stars', onPress: () => submitRating(item, 5) },
+      ]
+    );
+  };
+
+  const submitRating = async (item: any, rating: number) => {
+    try {
+      // Update mechanic's rating
+      const { data: currentMechanic } = await supabase
+        .from('mechanics')
+        .select('rating, total_ratings')
+        .eq('id', item.mechanic_id)
+        .single();
+
+      if (currentMechanic) {
+        const currentRating = currentMechanic.rating || 0;
+        const totalRatings = currentMechanic.total_ratings || 0;
+        const newTotalRatings = totalRatings + 1;
+        const newRating = ((currentRating * totalRatings) + rating) / newTotalRatings;
+
+        await supabase
+          .from('mechanics')
+          .update({ 
+            rating: newRating,
+            total_ratings: newTotalRatings
+          })
+          .eq('id', item.mechanic_id);
+
+        // Mark request as rated
+        await supabase
+          .from('requests')
+          .update({ rated: true, customer_rating: rating })
+          .eq('id', item.id);
+
+        Alert.alert(
+          'Thank You!',
+          `You rated the service ${rating} star${rating > 1 ? 's' : ''}. Your feedback helps us improve!`,
+          [{ text: 'OK' }]
+        );
+        
+        loadRequests();
       }
-    ]);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    }
   };
 
   const handleLogout = async () => {
@@ -355,28 +420,100 @@ export default function CustomerDashboard() {
         </View>
       </View>
 
-      {item.status === STATUS.ACCEPTED && (
-        <View style={styles.actionRow}>
+      <View style={styles.actionRow}>
+        {item.status === STATUS.PENDING && (
+          <>
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => router.push({ 
+                pathname: '/customer/edit-request', 
+                params: { requestId: item.id } 
+              })}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Edit</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => handleCancelRequest(item.id)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        
+        {item.status === STATUS.ACCEPTED && (
+          <>
+            <TouchableOpacity
+              style={styles.viewMapBtn}
+              onPress={() => router.push({ 
+                pathname: '/customer/send-request', 
+                params: { requestId: item.id } 
+              })}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="map-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Track on Map</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => handleCancelRequest(item.id)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        
+        {item.status === STATUS.COMPLETED && (
+          <>
+            <TouchableOpacity
+              style={styles.rateBtn}
+              onPress={() => handleRateMechanic(item)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="star-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Rate Service</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.rebookBtn}
+              onPress={() => router.push({ 
+                pathname: '/customer/choose-mechanic', 
+                params: { 
+                  carType: item.car_type,
+                  description: item.description || item.issue,
+                  rebook: true
+                } 
+              })}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="repeat-outline" size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Book Again</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        
+        {item.status === STATUS.DECLINED && (
           <TouchableOpacity
-            style={styles.viewMapBtn}
+            style={styles.retryBtn}
             onPress={() => router.push({ 
-              pathname: '/customer/send-request', 
+              pathname: '/customer/retry-request', 
               params: { requestId: item.id } 
             })}
+            activeOpacity={0.7}
           >
-            <Ionicons name="map-outline" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>View on Map</Text>
+            <Ionicons name="refresh-outline" size={16} color="#fff" />
+            <Text style={styles.actionBtnText}>Try Again</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.cancelBtn}
-            onPress={() => handleCancelRequest(item.id)}
-          >
-            <Ionicons name="close-circle-outline" size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -446,6 +583,7 @@ export default function CustomerDashboard() {
           <TouchableOpacity 
             style={styles.primaryAction}
             onPress={() => router.push('/customer/choose-mechanic')}
+            activeOpacity={0.8}
           >
             <View style={styles.actionIconContainer}>
               <Ionicons name="add-circle" size={28} color="#fff" />
@@ -499,13 +637,26 @@ export default function CustomerDashboard() {
           </View>
           
           {filteredRequests.length > 0 ? (
-            <FlatList
-              data={filteredRequests.slice(0, 5)} // Show only 5 most recent
-              renderItem={renderRequest}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-            />
+            <>
+              <FlatList
+                data={filteredRequests.slice(0, 5)} // Show only 5 most recent
+                renderItem={renderRequest}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
+              />
+              
+              {filteredRequests.length > 5 && (
+                <TouchableOpacity 
+                  style={styles.viewAllBtn}
+                  onPress={() => router.push('/customer/all-requests')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.viewAllText}>View All {filteredRequests.length} Requests</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#1E90FF" />
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="car-outline" size={60} color="#ccc" />
@@ -1014,6 +1165,61 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
+  },
+  editBtn: {
+    flex: 1,
+    backgroundColor: '#FF9800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  rateBtn: {
+    flex: 1,
+    backgroundColor: '#FF9500',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  rebookBtn: {
+    flex: 1,
+    backgroundColor: '#9C27B0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  retryBtn: {
+    flex: 1,
+    backgroundColor: '#607D8B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E90FF',
   },
   actionBtnText: {
     color: '#fff',

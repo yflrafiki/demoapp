@@ -25,11 +25,23 @@ export default function MechanicSignup() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [ghanaCard, setGhanaCard] = useState("");
 
   const handlePhoneChange = (text: string) => {
     const cleaned = text.replace(/\D/g, "");
     const limited = cleaned.slice(0, 10);
     setPhone(limited);
+  };
+
+  const handleGhanaCardChange = (text: string) => {
+    let formatted = text.toUpperCase();
+    if (!formatted.startsWith('GHA-')) {
+      formatted = 'GHA-' + formatted.replace(/^GHA-?/, '');
+    }
+    const numbers = formatted.replace('GHA-', '').replace(/\D/g, '');
+    if (numbers.length <= 10) {
+      setGhanaCard('GHA-' + numbers);
+    }
   };
 
   const pickImage = async () => {
@@ -73,8 +85,14 @@ export default function MechanicSignup() {
     if (loading) return;
     setLoading(true);
     
-    if (!name || !phone || !service || !password) {
+    if (!name || !phone || !service || !password || !ghanaCard) {
       Alert.alert("Missing Information", "Please fill in all required fields");
+      setLoading(false);
+      return;
+    }
+
+    if (!ghanaCard.match(/^GHA-\d{10}$/)) {
+      Alert.alert("Invalid Ghana Card", "Ghana Card must be in format GHA-XXXXXXXXXX (10 digits)");
       setLoading(false);
       return;
     }
@@ -108,7 +126,8 @@ export default function MechanicSignup() {
         is_available: true,
         lat: null,
         lng: null,
-        profile_image: profilePictureUrl
+        profile_image: profilePictureUrl,
+        ghana_card: ghanaCard
       });
 
       router.replace("/mechanic/dashboard");
@@ -207,11 +226,31 @@ export default function MechanicSignup() {
               </View>
             </View>
 
+            {/* Ghana Card Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Ghana Card Number</Text>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputIcon}>🆔</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="GHA-XXXXXXXXXX"
+                  placeholderTextColor="#999"
+                  value={ghanaCard}
+                  onChangeText={handleGhanaCardChange}
+                  maxLength={14}
+                  autoCapitalize="characters"
+                />
+              </View>
+              <Text style={styles.inputHint}>
+                {ghanaCard.length > 4 ? `${ghanaCard.replace('GHA-', '').length}/10 digits` : 'Format: GHA-XXXXXXXXXX'}
+              </Text>
+            </View>
+
             {/* Email Input (Optional) */}
             <View style={styles.inputContainer}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>Email Address</Text>
-                <Text style={styles.optionalBadge}>Optional</Text>
+                
               </View>
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputIcon}>📧</Text>
