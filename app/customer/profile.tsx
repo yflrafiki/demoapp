@@ -215,9 +215,16 @@ export default function CustomerProfile() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f7fa' },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 100 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f5f7fa' 
+  },
+  scrollView: { 
+    flex: 1 
+  },
+  scrollContent: { 
+    paddingBottom: 100 
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -232,9 +239,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  backBtn: { padding: 8 },
-  title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  content: { padding: 20 },
+  backBtn: { 
+    padding: 8 
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#1a1a1a' 
+  },
+  content: { 
+    padding: 20 
+  },
   avatarSection: {
     alignItems: 'center',
     marginBottom: 32,
@@ -256,8 +271,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  avatarText: { fontSize: 32, fontWeight: '700', color: '#fff' },
-  nameText: { fontSize: 24, fontWeight: '700', color: '#1a1a1a' },
+  avatarText: { 
+    fontSize: 32, 
+    fontWeight: '700', 
+    color: '#fff' 
+  },
+  nameText: { 
+    fontSize: 24, 
+    fontWeight: '700', 
+    color: '#1a1a1a' 
+  },
   form: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -269,8 +292,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
-  inputGroup: { marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: '600', color: '#495057', marginBottom: 8 },
+  inputGroup: { 
+    marginBottom: 20 
+  },
+  label: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#495057', 
+    marginBottom: 8 
+  },
   input: {
     borderWidth: 1,
     borderColor: '#e9ecef',

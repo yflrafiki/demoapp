@@ -192,12 +192,11 @@ export default function CustomerDashboard() {
           data.map(async (req: any) => {
             if (req.mechanic_id) {
               try {
-                const { data: mech } = await supabase.from('mechanics').select('name, phone, rating, profile_image').eq('id', req.mechanic_id).single();
+                const { data: mech } = await supabase.from('mechanics').select('name, phone, profile_image').eq('id', req.mechanic_id).single();
                 return { 
                   ...req, 
                   mechanic_name: mech?.name, 
                   mechanic_phone: mech?.phone,
-                  mechanic_rating: mech?.rating,
                   mechanic_profile_image: mech?.profile_image 
                 };
               } catch (e) { return req; }
@@ -386,12 +385,7 @@ export default function CustomerDashboard() {
               </View>
               <View>
                 <Text style={styles.mechanicName}>{item.mechanic_name}</Text>
-                {item.mechanic_rating && (
-                  <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={14} color="#FFD700" />
-                    <Text style={styles.ratingText}>{item.mechanic_rating.toFixed(1)}</Text>
-                  </View>
-                )}
+
               </View>
             </View>
             
@@ -489,7 +483,7 @@ export default function CustomerDashboard() {
                 params: { 
                   carType: item.car_type,
                   description: item.description || item.issue,
-                  rebook: true
+                  rebook: 'true'
                 } 
               })}
               activeOpacity={0.7}
@@ -1045,9 +1039,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#4CAF50',
-    textTransform: 'uppercase',
     marginLeft: 6,
-    letterSpacing: 0.5,
   },
   mechanicDetails: {
     flexDirection: 'row',

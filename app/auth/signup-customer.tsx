@@ -23,12 +23,24 @@ export default function CustomerSignup() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const handlePhoneChange = (text: string) => {
+    const cleaned = text.replace(/\D/g, "");
+    const limited = cleaned.slice(0, 10);
+    setPhone(limited);
+  };
+
   const handleSignup = async () => {
     if (loading) return;
     setLoading(true);
 
     if (!name || !email || !phone || !carType || !password) {
       Alert.alert("Missing Information", "Please fill all fields.");
+      setLoading(false);
+      return;
+    }
+
+    if (phone.length !== 10) {
+      Alert.alert("Invalid Phone", "Phone number must be exactly 10 digits");
       setLoading(false);
       return;
     }
@@ -128,13 +140,17 @@ export default function CustomerSignup() {
                 <Text style={styles.inputIcon}>📱</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your phone number"
+                  placeholder="10 digit phone number"
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={handlePhoneChange}
+                  maxLength={10}
                 />
               </View>
+              <Text style={styles.inputHint}>
+                {phone.length}/10 digits
+              </Text>
             </View>
 
             {/* Car Type Input */}
@@ -302,6 +318,12 @@ const styles = StyleSheet.create({
     color: "#999",
     marginBottom: 24,
     marginTop: -10,
+  },
+  inputHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 6,
+    marginLeft: 4,
   },
   button: {
     backgroundColor: "#1E90FF",

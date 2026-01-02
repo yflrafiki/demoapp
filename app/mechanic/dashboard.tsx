@@ -66,7 +66,7 @@ export default function MechanicDashboard() {
       // Get mechanic profile
       const mechanicResult = await supabase
         .from("mechanics")
-        .select("id, name, lat, lng, is_available, rating")
+        .select("id, name, lat, lng, is_available")
         .eq("auth_id", user.id)
         .single();
 
@@ -93,7 +93,7 @@ export default function MechanicDashboard() {
         .eq("mechanic_id", mechanicResult.data.id)
         .in("status", ["pending", "accepted", "completed"])
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(10);
 
       setRequests(requestsResult.data || []);
       console.log('Dashboard loaded successfully');
@@ -141,42 +141,13 @@ export default function MechanicDashboard() {
             };
             
             updateLocation();
-            locInterval = setInterval(updateLocation, 30000);
+            locInterval = setInterval(updateLocation, 60000);
           }
         } catch (locationError) {
           console.log('Location permission error:', locationError);
         }
 
-        // Setup realtime subscriptions
-        const mechanicChannel = supabase
-          .channel(`mechanic_${mechanic.id}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "requests",
-              filter: `mechanic_id=eq.${mechanic.id}`
-            },
-            (payload: any) => {
-              if (!mounted) return;
-              
-              if (payload.eventType === 'UPDATE') {
-                setRequests(prev => {
-                  const idx = prev.findIndex(r => r.id === payload.new.id);
-                  if (idx >= 0) {
-                    const updated = [...prev];
-                    updated[idx] = { ...prev[idx], ...payload.new };
-                    return updated;
-                  }
-                  return prev;
-                });
-              }
-            }
-          )
-          .subscribe();
 
-        channel = mechanicChannel;
       } catch (e) {
         console.log("Setup failed:", e);
       }
@@ -343,12 +314,7 @@ export default function MechanicDashboard() {
             </View>
             <View>
               <Text style={styles.greeting}>Welcome back, {mechanic?.name || 'Mechanic'} 👋</Text>
-              <View style={styles.ratingRow}>
-                <Ionicons name="star" size={14} color="#FFD700" />
-                <Text style={styles.ratingText}>
-                  {mechanic?.rating ? mechanic.rating.toFixed(1) : '0.0'}
-                </Text>
-              </View>
+              <Text style={styles.subtitle}>Professional Service Provider</Text>
             </View>
           </View>
           
@@ -381,16 +347,7 @@ export default function MechanicDashboard() {
           </View>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.push("/mechanic/map-view")}>
-            <View style={styles.actionIcon}>
-              <Ionicons name="map" size={28} color="#fff" />
-            </View>
-            <Text style={styles.actionTitle}>Live Map</Text>
-            <Text style={styles.actionSubtitle}>View nearby requests</Text>
-          </TouchableOpacity>
-        </View>
+
 
         {/* Incoming Requests */}
         {incomingRequests.length > 0 && (
@@ -670,11 +627,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   statNumber: {
     fontSize: 20,
@@ -689,43 +641,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  quickActions: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  actionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    minHeight: 100,
-  },
-  actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#1E90FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  actionSubtitle: {
-    fontSize: 11,
-    color: '#666',
-    textAlign: 'center',
-  },
+
   requestsSection: {
     marginTop: 20,
     paddingHorizontal: 20,
@@ -752,11 +668,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   requestHeader: {
     flexDirection: 'row',
@@ -865,6 +778,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 20,
     paddingHorizontal: 20,
+    padding: 20,
   },
   emptyTitle: {
     fontSize: 16,
@@ -888,11 +802,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   backBtn: {
     color: '#1E90FF',
@@ -911,11 +820,6 @@ const styles = StyleSheet.create({
     margin: 16,
     padding: 24,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
   },
   detailLabel: {
     fontSize: 12,
@@ -941,11 +845,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
   },
   navContainer: {
     flexDirection: 'row',
@@ -981,17 +880,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
+
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -1002,22 +891,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   mapBtn: {
     backgroundColor: '#3B82F6',
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   btnText: {
     color: '#fff',
@@ -1064,10 +943,5 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 12,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
 });

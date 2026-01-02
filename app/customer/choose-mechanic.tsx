@@ -92,7 +92,7 @@ export default function ChooseMechanic() {
       // Get all mechanics
       const resp = await supabase
         .from("mechanics")
-        .select("id,name,phone,lat,lng,is_available,specialization,rating,created_at,profile_image")
+        .select("id,name,phone,lat,lng,is_available,specialization,created_at,profile_image")
         .order("created_at", { ascending: false });
 
       // Diagnostic logging: show full response so we can see errors/policies
@@ -171,14 +171,7 @@ export default function ChooseMechanic() {
             </View>
           </View>
 
-          {selectedMechanic.rating && (
-            <View style={styles.detailCard}>
-              <Text style={styles.sectionTitle}>Rating</Text>
-              <Text style={styles.ratingText}>
-                ⭐ {selectedMechanic.rating.toFixed(1)} / 5.0
-              </Text>
-            </View>
-          )}
+
 
 
 
@@ -251,9 +244,7 @@ export default function ChooseMechanic() {
                     <Text style={styles.specialization}>{item.specialization}</Text>
                   </View>
                 </View>
-                {item.rating && (
-                  <Text style={styles.rating}>⭐ {item.rating.toFixed(1)}</Text>
-                )}
+
               </View>
 
               <View style={styles.mechanicDetails}>

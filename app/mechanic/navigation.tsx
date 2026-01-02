@@ -94,7 +94,7 @@ export default function MechanicNavigation() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
 
-      const last = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      const last = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       if (mounted && last) {
         const mechLoc = { lat: last.coords.latitude, lng: last.coords.longitude };
         setMechanicLocation(mechLoc);
@@ -103,7 +103,7 @@ export default function MechanicNavigation() {
       }
 
       watcher = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Highest, timeInterval: 3000, distanceInterval: 1 },
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 10000, distanceInterval: 5 },
         async (loc) => {
           if (!mounted || !loc) return;
           const mechLoc = { lat: loc.coords.latitude, lng: loc.coords.longitude };
