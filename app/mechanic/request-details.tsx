@@ -242,8 +242,15 @@ export default function MechanicRequestDetails() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC' 
+  },
+  center: {
+     flex: 1, 
+     justifyContent: 'center', 
+     alignItems: 'center' 
+    },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -254,8 +261,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#333' },
-  content: { flex: 1, padding: 16 },
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#333' 
+  },
+  content: { 
+    flex: 1, 
+    padding: 16 
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -267,19 +281,47 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
+  cardTitle: { 
+    fontSize: 16, 
+    fontWeight: '700', 
+    color: '#333', 
+    marginBottom: 12 
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
-  statusText: { fontSize: 14, fontWeight: '600' },
-  infoRow: { flexDirection: 'row', marginBottom: 8, alignItems: 'center' },
-  label: { fontSize: 14, color: '#666', fontWeight: '600', width: 80 },
-  value: { fontSize: 14, color: '#333', flex: 1 },
-  priceText: { fontWeight: '700', color: '#4CAF50' },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  statusText: { 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
+  infoRow: { 
+    flexDirection: 'row', 
+    marginBottom: 8, 
+    alignItems: 'center' 
+  },
+  label: { 
+    fontSize: 14, 
+    color: '#666', 
+    fontWeight: '600', 
+    width: 80 
+  },
+  value: { 
+    fontSize: 14, 
+    color: '#333', 
+    flex: 1 
+  },
+  priceText: { 
+    fontWeight: '700', 
+    color: '#4CAF50' 
+  },
+  phoneRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1 
+  },
   callButton: {
     backgroundColor: '#4CAF50',
     width: 32,
@@ -289,10 +331,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
-  timelineItem: { flexDirection: 'row', marginBottom: 8 },
-  timelineLabel: { fontSize: 14, color: '#666', fontWeight: '600', width: 80 },
-  timelineValue: { fontSize: 14, color: '#333', flex: 1 },
-  actionsCard: { marginBottom: 16 },
+  timelineItem: { 
+    flexDirection: 'row', 
+    marginBottom: 8 
+  },
+  timelineLabel: { 
+    fontSize: 14, 
+    color: '#666', 
+    fontWeight: '600', 
+    width: 80 
+  },
+  timelineValue: { 
+    fontSize: 14, 
+    color: '#333', 
+    flex: 1 
+  },
+  actionsCard: {
+     marginBottom: 16 
+    },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,8 +358,18 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  arrivedButton: { backgroundColor: '#2196F3' },
-  completeButton: { backgroundColor: '#4CAF50' },
-  navigationButton: { backgroundColor: '#FF6B35' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  arrivedButton: { 
+    backgroundColor: '#2196F3'
+   },
+  completeButton: { 
+    backgroundColor: '#4CAF50' 
+  },
+  navigationButton: { 
+    backgroundColor: '#FF6B35' 
+  },
+  buttonText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '600' 
+  },
 });

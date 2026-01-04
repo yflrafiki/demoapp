@@ -15,6 +15,8 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from "../../lib/supabase";
 import { router } from "expo-router";
+// Use vector icons for a clean, consistent UI instead of emoji
+import { Ionicons } from '@expo/vector-icons';
 
 export default function MechanicSignup() {
   const [name, setName] = useState("");
@@ -151,9 +153,9 @@ export default function MechanicSignup() {
         <View style={styles.container}>
           {/* Header Section */}
           <View style={styles.headerSection}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.iconText}>🔧</Text>
-            </View>
+              <View style={styles.iconContainer}>
+                <Ionicons name="construct" size={36} color="#FF6B35" />
+              </View>
             <Text style={styles.header}>Create Mechanic Account</Text>
             <Text style={styles.subtitle}>Grow your business and reach more customers</Text>
           </View>
@@ -168,7 +170,7 @@ export default function MechanicSignup() {
                   <Image source={{ uri: profileImage }} style={styles.profileImage} />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <Text style={styles.imagePlaceholderIcon}>📷</Text>
+                    <Ionicons name="camera-outline" size={26} color="#666" style={styles.imagePlaceholderIcon} />
                     <Text style={styles.imagePlaceholderText}>Add Photo</Text>
                   </View>
                 )}
@@ -178,7 +180,7 @@ export default function MechanicSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Full Name</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>👤</Text>
+                <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your full name"
@@ -194,7 +196,7 @@ export default function MechanicSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Phone Number</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📱</Text>
+                <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="10 digit phone number"
@@ -214,7 +216,7 @@ export default function MechanicSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Service Specialization</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>⚙️</Text>
+                <Ionicons name="construct-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="e.g., Engine repair, Brake service"
@@ -230,7 +232,7 @@ export default function MechanicSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Ghana Card Number</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🆔</Text>
+                <Ionicons name="id-card" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="GHA-XXXXXXXXXX"
@@ -253,7 +255,7 @@ export default function MechanicSignup() {
                 
               </View>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📧</Text>
+                <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your email"
@@ -273,7 +275,7 @@ export default function MechanicSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🔒</Text>
+                <Ionicons name="lock-closed" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, styles.passwordInput]}
                   placeholder="Create a strong password"
@@ -286,9 +288,7 @@ export default function MechanicSignup() {
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showPassword ? "👁️" : "👁️‍🗨️"}
-                  </Text>
+                  <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#666" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.inputHint}>
@@ -311,7 +311,7 @@ export default function MechanicSignup() {
 
             {/* Info Box */}
             <View style={styles.infoBox}>
-              <Text style={styles.infoIcon}>ℹ️</Text>
+              <Ionicons name="information-circle-outline" size={16} color="#1a5490" style={styles.infoIcon} />
               <Text style={styles.infoText}>
                 Your phone number will be used for customer communication and as your login username
               </Text>

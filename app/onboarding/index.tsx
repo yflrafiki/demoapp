@@ -3,24 +3,21 @@ import React from 'react'
 import { router } from 'expo-router'
 
 const Onboarding = () => {
+  // Features list - removed emoji icons to keep UI minimal
   const features = [
     {
-      icon: '🔍',
       title: 'Find Mechanics',
       description: 'Browse verified mechanics in your area'
     },
     {
-      icon: '⭐',
       title: 'Read Reviews',
       description: 'Check ratings from real customers'
     },
     {
-      icon: '💰',
       title: 'Compare Prices',
       description: 'Get transparent quotes upfront'
     },
     {
-      icon: '📅',
       title: 'Book Instantly',
       description: 'Schedule appointments with ease'
     }
@@ -30,6 +27,7 @@ const Onboarding = () => {
     <ScrollView contentContainerStyle={styles.container}>
       {/* Hero Section */}
       <View style={styles.heroSection}>
+        {/* Reduced hero icon size and simplified appearance */}
         <View style={styles.iconContainer}>
           <Text style={styles.heroIcon}>🔧</Text>
         </View>
@@ -43,7 +41,8 @@ const Onboarding = () => {
       <View style={styles.featuresContainer}>
         {features.map((feature, index) => (
           <View key={index} style={styles.featureCard}>
-            <Text style={styles.featureIcon}>{feature.icon}</Text>
+            {/* Simple colored dot instead of emoji icon */}
+            <View style={styles.featureDot} />
             <Text style={styles.featureTitle}>{feature.title}</Text>
             <Text style={styles.featureDescription}>{feature.description}</Text>
           </View>
@@ -81,16 +80,18 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    // smaller circle to reduce visual weight of the hero icon
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#E8F4FF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: 18,
   },
   heroIcon: {
-    fontSize: 50,
+    // reduced hero icon font size for a simpler look
+    fontSize: 28,
   },
   title: {
     fontSize: 28,
@@ -123,6 +124,14 @@ const styles = StyleSheet.create({
   },
   featureIcon: {
     fontSize: 36,
+    marginBottom: 12,
+  },
+  // Small colored dot used as a minimal icon for feature cards
+  featureDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#1E90FF',
     marginBottom: 12,
   },
   featureTitle: {

@@ -1,14 +1,5 @@
 import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Image,
-  Alert,
-  ScrollView
-} from "react-native";
+import {  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,  Alert, ScrollView} from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from "../../lib/supabase";
 import { useRouter, useFocusEffect } from "expo-router";

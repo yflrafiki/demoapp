@@ -13,6 +13,8 @@ import {
 } from "react-native";
 import { supabase } from "../../lib/supabase";
 import { router } from "expo-router";
+// Use vector icons for a clean, consistent UI instead of emoji
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CustomerSignup() {
   const [name, setName] = useState("");
@@ -91,9 +93,9 @@ export default function CustomerSignup() {
         <View style={styles.container}>
           {/* Header Section */}
           <View style={styles.headerSection}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.iconText}>👤</Text>
-            </View>
+              <View style={styles.iconContainer}>
+                <Ionicons name="person-outline" size={36} color="#1E90FF" />
+              </View>
             <Text style={styles.header}>Create Customer Account</Text>
             <Text style={styles.subtitle}>Find trusted mechanics for your vehicle</Text>
           </View>
@@ -104,7 +106,7 @@ export default function CustomerSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Full Name</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>👤</Text>
+                <Ionicons name="person-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your full name"
@@ -120,7 +122,7 @@ export default function CustomerSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📧</Text>
+                <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your email"
@@ -137,7 +139,7 @@ export default function CustomerSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Phone Number</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📱</Text>
+                <Ionicons name="call-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="10 digit phone number"
@@ -157,7 +159,7 @@ export default function CustomerSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Car Type</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🚗</Text>
+                <Ionicons name="car" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="e.g., Toyota Camry, Honda Civic"
@@ -173,7 +175,7 @@ export default function CustomerSignup() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🔒</Text>
+                <Ionicons name="lock-closed" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, styles.passwordInput]}
                   placeholder="Create a strong password"
@@ -186,9 +188,7 @@ export default function CustomerSignup() {
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showPassword ? "👁️" : "👁️‍🗨️"}
-                  </Text>
+                  <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#666" />
                 </TouchableOpacity>
               </View>
             </View>

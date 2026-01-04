@@ -116,15 +116,60 @@ export default function MechanicRequests({ route }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#fff" },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 12 },
-  card: { backgroundColor: "#f7f7f7", padding: 12, borderRadius: 10, marginBottom: 12 },
-  cardTitle: { fontSize: 16, fontWeight: "700" },
-  completeBtn: { backgroundColor: "green", padding: 10, borderRadius: 8 },
-  completeText: { color: "#fff", fontWeight: "700" },
-  detailsBtn: { backgroundColor: "#FF6B35", padding: 10, borderRadius: 8, flex: 1 },
-  detailsText: { color: "#fff", fontWeight: "700", textAlign: "center" },
-  viewDetailsHint: { color: "#FF6B35", fontSize: 12, marginTop: 4, fontStyle: "italic" },
-  empty: { color: "#999", textAlign: "center", marginVertical: 12 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { 
+    flex: 1, 
+    padding: 16, 
+    backgroundColor: "#fff" 
+  },
+  title: { 
+    fontSize: 22, 
+    fontWeight: "700", 
+    marginBottom: 12 
+  },
+  card: { 
+    backgroundColor: "#f7f7f7",
+     padding: 12, 
+     borderRadius: 10, 
+     marginBottom: 12 
+    },
+  cardTitle: { 
+    fontSize: 16, 
+    fontWeight: "700" 
+  },
+  completeBtn: { 
+    backgroundColor: "green", 
+    padding: 10, 
+    borderRadius: 8 
+  },
+  completeText: { 
+    color: "#fff", 
+    fontWeight: "700" 
+  },
+  detailsBtn: { 
+    backgroundColor: "#FF6B35", 
+    padding: 10, 
+    borderRadius: 8, 
+    flex: 1 
+  },
+  detailsText: { 
+    color: "#fff", 
+    fontWeight: "700", 
+    textAlign: "center" 
+  },
+  viewDetailsHint: {
+     color: "#FF6B35", 
+     fontSize: 12, 
+     marginTop: 4, 
+     fontStyle: "italic" 
+    },
+  empty: { 
+    color: "#999", 
+    textAlign: "center", 
+    marginVertical: 12 
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
 });

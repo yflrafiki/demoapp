@@ -248,13 +248,38 @@ const MechanicMap: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: { marginTop: 16, fontSize: 16, color: "#666" },
-  header: { padding: 20, paddingTop: 60, backgroundColor: "#f8f9fa" },
-  title: { fontSize: 24, fontWeight: "bold", color: "#333" },
-  subtitle: { fontSize: 16, color: "#666", marginTop: 4 },
-  mapWrapper: { flex: 1 },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#fff" 
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  loadingText: {
+     marginTop: 16, 
+     fontSize: 16,
+      color: "#666" 
+    },
+  header: { 
+    padding: 20, 
+    paddingTop: 60, 
+    backgroundColor: "#f8f9fa" 
+  },
+  title: { 
+    fontSize: 24, 
+    fontWeight: "bold", 
+    color: "#333" 
+  },
+  subtitle: { 
+    fontSize: 16, 
+    color: "#666", 
+    marginTop: 4 
+  },
+  mapWrapper: {
+     flex: 1 
+    },
   bottomSheet: { 
     backgroundColor: "#fff", 
     padding: 20, 
@@ -262,17 +287,60 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20, 
     elevation: 10 
   },
-  requestTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 12, color: "#333" },
-  customerName: { fontSize: 20, fontWeight: "bold", color: "#333" },
-  carType: { fontSize: 16, color: "#555", marginTop: 4 },
-  issue: { fontSize: 14, color: "#666", marginTop: 4 },
-  phone: { fontSize: 14, color: "#333", marginVertical: 4 },
-  status: { fontSize: 14, color: "#888", marginTop: 4 },
-  actionBtn: { padding: 14, borderRadius: 10, marginVertical: 6, alignItems: "center" },
-  acceptBtn: { backgroundColor: "#32CD32" },
-  closeBtn: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#ddd" },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  closeBtnText: { color: "#666", fontSize: 16, fontWeight: "600" },
+  requestTitle: { 
+    fontSize: 18, 
+    fontWeight: "bold", 
+    marginBottom: 12, 
+    color: "#333" 
+  },
+  customerName: { 
+    fontSize: 20, 
+    fontWeight: "bold", 
+    color: "#333" 
+  },
+  carType: { 
+    fontSize: 16, 
+    color: "#555", 
+    marginTop: 4 },
+  issue: { 
+    fontSize: 14, 
+    color: "#666", 
+    marginTop: 4 
+  },
+  phone: {
+     fontSize: 14, 
+     color: "#333", 
+     marginVertical: 4 
+    },
+  status: { 
+    fontSize: 14, 
+    color: "#888", 
+    marginTop: 4 
+  },
+  actionBtn: {
+     padding: 14, 
+     borderRadius: 10, 
+     marginVertical: 6, 
+     alignItems: "center" 
+    },
+  acceptBtn: { 
+    backgroundColor: "#32CD32" 
+  },
+  closeBtn: { 
+    backgroundColor: "transparent", 
+    borderWidth: 1, 
+    borderColor: "#ddd" 
+  },
+  btnText: { 
+    color: "#fff", 
+    fontSize: 16, 
+    fontWeight: "700" 
+  },
+  closeBtnText: { 
+    color: "#666", 
+    fontSize: 16,
+     fontWeight: "600" 
+    },
   debugPanel: {
     position: 'absolute',
     top: 100,

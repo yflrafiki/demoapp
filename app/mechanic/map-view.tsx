@@ -1,24 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Linking,
-  FlatList,
-  ScrollView,
-  SafeAreaView,
-} from "react-native";
+import {View,Text,StyleSheet, TouchableOpacity,  ActivityIndicator, Alert, Linking, FlatList, ScrollView, SafeAreaView,} from "react-native";
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";
 import { useFocusEffect, router } from "expo-router";
-import {
-  acceptRequest,
-  declineRequest,
-  updateRequestLocation,
-} from "../../lib/requests";
+import {acceptRequest,declineRequest,updateRequestLocation,} from "../../lib/requests";
 import { MechanicRequest } from "../../types/mechanic.types";
 
 export default function MechanicMap() {

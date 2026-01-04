@@ -1,18 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  Linking,
-  Alert,
-  ScrollView,
-  SafeAreaView,
-  Platform
-} from "react-native";
+import {View,Text,FlatList,TouchableOpacity,StyleSheet,ActivityIndicator,RefreshControl,Linking,Alert,ScrollView,SafeAreaView,Platform} from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from "expo-location";
 import { supabase } from "../../lib/supabase";

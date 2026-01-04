@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-} from "react-native";
+import {View,Text,TextInput,TouchableOpacity,ActivityIndicator,StyleSheet,Alert,} from "react-native";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "expo-router";
 

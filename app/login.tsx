@@ -1,18 +1,9 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native";
+import { View,Text,TextInput,TouchableOpacity,StyleSheet,Alert,ActivityIndicator,KeyboardAvoidingView,Platform,ScrollView, } from "react-native";
 import { supabase } from "../lib/supabase";
 import { router } from "expo-router";
+// Use Ionicons for simple, consistent icons instead of emoji
+import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const [emailOrPhone, setEmailOrPhone] = useState("");
@@ -98,8 +89,8 @@ export default function LoginScreen() {
           {/* Header Section */}
           <View style={styles.headerSection}>
             <View style={styles.iconContainer}>
-              <Text style={styles.iconText}>🔧</Text>
-            </View>
+                <Ionicons name="construct" size={36} color="#1E90FF" />
+              </View>
             <Text style={styles.header}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue</Text>
           </View>
@@ -110,7 +101,7 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email or Phone</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>📧</Text>
+                <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your email or phone"
@@ -127,7 +118,7 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🔒</Text>
+                <Ionicons name="lock-closed" size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, styles.passwordInput]}
                   placeholder="Enter your password"
@@ -140,9 +131,7 @@ export default function LoginScreen() {
                   style={styles.eyeButton}
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  <Text style={styles.eyeIcon}>
-                    {showPassword ? "👁️" : "👁️‍🗨️"}
-                  </Text>
+                  <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color="#666" />
                 </TouchableOpacity>
               </View>
             </View>
